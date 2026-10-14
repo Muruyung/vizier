@@ -109,7 +109,8 @@ jobs:
       - name: Commit version bump
         run: |
           git add Cargo.toml vizier-derive/Cargo.toml CHANGELOG.md
-          git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
+          # A retried release finds the bump already committed by the failed run.
+          git diff --cached --quiet || git commit -m "chore: bump version to ${{ steps.version.outputs.version }}"
           git tag -a "v${{ steps.version.outputs.version }}" -m "Release v${{ steps.version.outputs.version }}"
 
       - name: Push changes
@@ -191,6 +192,12 @@ jobs:
             clang \
             perl \
             make
+
+      # sherpa-onnx-sys downloads its prebuilt libs into target/sherpa-onnx-prebuilt,
+      # which rust-cache strips before saving while keeping the build script's
+      # output; a restored cache then skips the download and the link fails.
+      - name: Force sherpa-onnx prebuilt re-download
+        run: cargo clean --release --target ${{ matrix.target }} -p sherpa-onnx-sys
 
       - name: Build binary
         run: cargo build --release --target ${{ matrix.target }}
