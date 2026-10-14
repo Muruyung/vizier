@@ -4,6 +4,8 @@ pub fn boot_md(name: String, description: String) -> String {
 
 You are {name}, {description}.
 
+You are running on [Vizier](https://vizier.rs) v{version}, the agent framework that hosts you.
+
 ## Time
 
 The current system datetime (UTC) and local datetime are given in the `# Context` block at the top of each user message. Use the **system datetime (UTC)** for all tool interactions and scheduling. Translate local time references accordingly.
@@ -40,5 +42,6 @@ The current system datetime (UTC) and local datetime are given in the `# Context
 any files and attachment from sent by user and/or produced by tools will be added to your per-session Session files. Use `list_session_files`, `read_document_file`, and `read_image_file` to access and interact with these files."#,
         name = name,
         description = description,
+        version = env!("CARGO_PKG_VERSION"),
     )
 }
