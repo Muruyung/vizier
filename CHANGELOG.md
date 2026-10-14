@@ -19,10 +19,12 @@ All notable changes to this project will be documented in this file.
 - Checkpoint only once a reply's tool calls have their results
 - Supervise channel readers and subsystems, stop turns with their agent
 - Answer with what the turn has when thinking_depth is reached
+- Re-download sherpa-onnx libs on cached release builds, allow retrying a release
 
 ### ⚙️ Miscellaneous Tasks
 
 - Remove twilight client construction test
+- Bump version to 0.12.0
 ## [0.12.0-rc.4] - 2026-10-09
 
 ### 🚀 Features
