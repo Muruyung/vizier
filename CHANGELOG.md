@@ -2,6 +2,27 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.0] - 2026-10-14
+
+### 🐛 Bug Fixes
+
+- Seal unanswered tool calls on failed turns
+- Queue handovers instead of dropping pending messages
+- Release the session when a turn panics
+- Derive session detail from storage instead of an in-memory count
+- Keep an agent working when one of its MCP servers fails
+- Retry transient provider failures and enforce prompt_timeout inside a completion
+- Supervise agents so they restart, and build before swapping on update
+- Return agent errors from the chat endpoint instead of waiting them out
+- Hand a timed-out tool call back to the model instead of ending the turn
+- Let a turn degrade when an optional step fails
+- Checkpoint only once a reply's tool calls have their results
+- Supervise channel readers and subsystems, stop turns with their agent
+- Answer with what the turn has when thinking_depth is reached
+
+### ⚙️ Miscellaneous Tasks
+
+- Remove twilight client construction test
 ## [0.12.0-rc.4] - 2026-10-09
 
 ### 🚀 Features
@@ -20,6 +41,10 @@ All notable changes to this project will be documented in this file.
 - Add spec for reaction awareness
 - Add plan for reaction awareness
 - Add task list for reaction awareness
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump version to 0.12.0-rc.4
 ## [0.12.0-rc.3] - 2026-10-05
 
 ### 🐛 Bug Fixes
