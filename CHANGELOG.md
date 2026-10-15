@@ -2,6 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.12.1] - 2026-10-15
+
+### 🚀 Features
+
+- [**breaking**] Code mode by default, tool categories, <server>_<tool> MCP names [**breaking**]
+- Tell agents the Vizier version they run on
+
+### 🐛 Bug Fixes
+
+- [**breaking**] Name sandbox catalogue entries by "name", not "function"
+- Dream journal listing without a limit, stale dream tool names
+
+### 📚 Documentation
+
+- Spec 014 code mode by default, tool categories, simpler MCP tool names
+- Plan 014 code mode by default, tool categories, simpler MCP tool names
+- Tasks 014 code mode by default, tool categories, simpler MCP tool names
+
+### ⚙️ Miscellaneous Tasks
+
+- Cargo update to latest semver-compatible versions
+- Upgrade dirs, strum, nanoid, base64, sha2, argon2, jsonwebtoken, tower-http, rusqlite, croner, indicatif, termimad, bzip2, zip, similar, calamine, pdf-extract, symphonia, bollard, tungstenite, text-splitter
+- Upgrade utoipa 6, teloxide 0.17, fastembed 7
+- Upgrade rig-core 0.39, rmcp 3
+- Upgrade monty to 1.0.0
+- Enable speckit auto-commit hooks
 ## [0.12.0] - 2026-10-14
 
 ### 🐛 Bug Fixes
@@ -25,6 +51,7 @@ All notable changes to this project will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - Remove twilight client construction test
+- Bump version to 0.12.0
 - Bump version to 0.12.0
 - Bump version to 0.12.0
 ## [0.12.0-rc.4] - 2026-10-09
