@@ -1,7 +1,7 @@
 {
-  "etag": "\"69c8fa4b9a563aeadc381bb11c59d3e6\"",
-  "fetched_at": "2026-10-16T12:21:27Z",
-  "models": 8894,
+  "etag": "\"6594bc7216a10b8e1a852e30b16a3e30\"",
+  "fetched_at": "2026-10-16T17:06:46Z",
+  "models": 8983,
   "no_logo": [
     "aion-labs",
     "aisingapore",
@@ -57,7 +57,7 @@
     "upstage",
     "writer"
   ],
-  "providers": 230,
+  "providers": 232,
   "schema": 1,
   "source_url": "https://models.dev/api.json"
 }

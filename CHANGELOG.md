@@ -2,6 +2,24 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0-rc.2] - 2026-10-16
+
+### 🚀 Features
+
+- Install.sh accepts --version and --install-dir flags
+- Export OpenTelemetry traces and metrics following the GenAI conventions
+- [**breaking**] Count every model call and rebuild the usage page on cost, activity and model [**breaking**]
+- Show Discord and Telegram conversations by server, channel and topic name on the usage page
+- Teach agents to split large tasks and keep memories to one topic
+
+### 🐛 Bug Fixes
+
+- One scrollbar, truncated long names and topic titles on the usage page
+- Tell the aborted turn's own channel when /abort comes from Discord or Telegram
+
+### 📚 Documentation
+
+- Document OpenTelemetry export, spans, attributes and the Jaeger setup
 ## [0.13.0-rc.1] - 2026-10-16
 
 ### 🚀 Features
@@ -74,6 +92,7 @@ All notable changes to this project will be documented in this file.
 - Bump version to 0.12.1
 - Add model catalogue seed
 - Embed the catalogue seed at build time and add the stub LLM fixture
+- Bump version to 0.13.0-rc.1
 ## [0.12.0] - 2026-10-14
 
 ### 🐛 Bug Fixes
