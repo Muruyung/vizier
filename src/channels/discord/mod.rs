@@ -635,6 +635,40 @@ If I am halucinating, feel free to `/lobotomy` me
         let is_dm = msg.guild_id.is_none();
         let is_mention = msg.mentions.iter().any(|mention| mention.id == bot.user_id);
 
+        // `/abort` typed as text rather than picked as the slash command. It must reach the
+        // agent as a command: as chat it would queue behind the very turn it means to stop.
+        if (is_dm || is_mention) && is_text_abort(&msg.content, bot.user_id) {
+            let session = VizierSession(self.agent_id.clone(), channel, topic_id);
+            let renderer = TurnRenderer {
+                http: self.http.clone(),
+                file_manager: self.deps.file_manager.clone(),
+                storage: self.deps.storage.clone(),
+                agent_id: self.agent_id.clone(),
+                channel_id: msg.channel_id,
+                show_thinking,
+                show_tool_calls,
+            };
+            let (response_tx, response_rx) = flume::unbounded();
+            let request = VizierRequest {
+                timestamp: Utc::now(),
+                user: self.agent_id.clone(),
+                content: VizierRequestContent::Command("abort".to_string()),
+                ..Default::default()
+            };
+            if let Err(err) = self
+                .deps
+                .transport
+                .send_request(session, request, Some(response_tx))
+                .await
+            {
+                tracing::error!("{}", err);
+                return;
+            }
+            // Posts "thinking aborted" if a turn was stopped; nothing if there was none.
+            tokio::spawn(renderer.render(response_rx));
+            return;
+        }
+
         let mut attachments = vec![];
         for attachment in &msg.attachments {
             let bytes_result = async {
@@ -967,6 +1001,14 @@ fn discord_emoji_key(emoji: &EmojiReactionType) -> String {
 /// bot's own as `@name (you)`, anyone else's the way message authors are rendered. Mentions are
 /// rewritten rather than removed so the sentence keeps its shape and the agent can tell who is
 /// being addressed or talked about.
+/// The message is `/abort`, alone or after mentions of the bot.
+fn is_text_abort(content: &str, bot_id: Id<UserMarker>) -> bool {
+    let text = content
+        .replace(&format!("<@{}>", bot_id), "")
+        .replace(&format!("<@!{}>", bot_id), "");
+    text.trim().eq_ignore_ascii_case("/abort")
+}
+
 fn render_mentions(content: &str, mentions: &[(Id<UserMarker>, &str)], bot: &BotIdentity) -> String {
     let mut content = content.to_string();
     let bot_mention = (bot.user_id, bot.name.as_str());
@@ -986,6 +1028,16 @@ fn render_mentions(content: &str, mentions: &[(Id<UserMarker>, &str)], bot: &Bot
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn text_abort_is_recognised_with_or_without_a_mention() {
+        let bot = Id::new(42);
+        assert!(is_text_abort("/abort", bot));
+        assert!(is_text_abort("<@42> /abort ", bot));
+        assert!(is_text_abort("<@!42>/abort", bot));
+        assert!(!is_text_abort("/abort the plan", bot));
+        assert!(!is_text_abort("<@7> /abort", bot));
+    }
 
     #[test]
     fn emoji_keys_keep_unicode_and_name_custom_emoji() {
