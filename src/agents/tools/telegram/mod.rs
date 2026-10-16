@@ -69,7 +69,7 @@ impl VizierTool for SendTelegramMessage {
     }
 
     fn description(&self) -> String {
-        "send a telegram message to a chat, avoid using this when user interact with you directly from telegram".into()
+        "post to a telegram chat other than the current conversation. Your reply to the current conversation is delivered automatically; never use this for it".into()
     }
 
     async fn call(&self, args: Self::Input, _ctx: &ToolContext) -> Result<Self::Output, VizierError> {

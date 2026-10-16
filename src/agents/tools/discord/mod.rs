@@ -89,7 +89,7 @@ impl VizierTool for SendDiscordMessage {
     }
 
     fn description(&self) -> String {
-        "send a discord message to a channel, avoid using this when user interact with you directly from discord".into()
+        "post to a discord channel other than the current conversation. Your reply to the current conversation is delivered automatically; never use this for it".into()
     }
 
     async fn call(&self, args: Self::Input, _ctx: &ToolContext) -> anyhow::Result<Self::Output, VizierError> {

@@ -41,7 +41,7 @@ impl VizierTool for SendWebuiMessage {
     }
 
     fn description(&self) -> String {
-        "send a message to a webui user's topic, avoid using this when user interact with you directly from webui".into()
+        "post to a webui user's topic other than the current conversation. Your reply to the current conversation is delivered automatically; never use this for it".into()
     }
 
     async fn call(&self, args: Self::Input, _ctx: &ToolContext) -> Result<Self::Output, VizierError> {
