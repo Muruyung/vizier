@@ -413,7 +413,9 @@ impl VizierTool for MemoryWrite {
     }
 
     fn description(&self) -> String {
-        "Write or update a memory. A write with no bundle named goes to your default bundle; \
+        "Write or update a memory. One memory is one standalone topic, named for it ('Andy', \
+        not 'People'; 'Skyrim', not 'Gaming'); search first and update the existing memory for \
+        that topic rather than creating a duplicate. A write with no bundle named goes to your default bundle; \
         naming a new bundle creates it automatically. Use `path` to nest a concept under a \
         subdirectory (e.g. 'friends/bred'). Same-bundle links are ordinary markdown links \
         ([label](path/to/concept.md)); cross-bundle links use [[bundle/slug]] or bare [[bundle]]. \
