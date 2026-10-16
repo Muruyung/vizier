@@ -7,6 +7,39 @@ INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 info() { echo "→ $1"; }
 error() { echo "✗ $1" >&2; exit 1; }
 
+usage() {
+    cat <<EOF
+Usage: install.sh [options]
+
+Options:
+  -v, --version <version>   Install a specific version (e.g. 0.13.0 or v0.13.0-rc.1).
+                            Defaults to the latest stable release.
+  -d, --install-dir <dir>   Install directory (default: \$HOME/.local/bin).
+  -h, --help                Show this help.
+
+Environment variables VERSION and INSTALL_DIR are also honoured; flags take precedence.
+
+Example:
+  curl -fsSL https://raw.githubusercontent.com/$REPO/master/install.sh | bash -s -- --version 0.13.0
+EOF
+}
+
+# Parse arguments
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -v|--version)
+            [ -n "$2" ] || error "$1 requires a value"
+            VERSION="$2"; shift 2;;
+        --version=*) VERSION="${1#*=}"; shift;;
+        -d|--install-dir)
+            [ -n "$2" ] || error "$1 requires a value"
+            INSTALL_DIR="$2"; shift 2;;
+        --install-dir=*) INSTALL_DIR="${1#*=}"; shift;;
+        -h|--help) usage; exit 0;;
+        *) usage >&2; error "Unknown option: $1";;
+    esac
+done
+
 # Detect platform
 case "$(uname -s)" in
     Linux*) OS="linux";;
@@ -40,7 +73,9 @@ info "Installing Vizier v$VERSION for $TARGET"
 mkdir -p "$INSTALL_DIR"
 
 # Download
-cd "$(mktemp -d)"
+TMP_DIR="$(mktemp -d)"
+trap 'rm -rf "$TMP_DIR"' EXIT
+cd "$TMP_DIR"
 curl -fsSL "https://github.com/$REPO/releases/download/v$VERSION/vizier-v$VERSION-$TARGET.tar.gz" -o vizier.tar.gz || error "Download failed. Version v$VERSION for $TARGET may not exist."
 tar -xzf vizier.tar.gz
 mv "vizier-v$VERSION-$TARGET/vizier" "$INSTALL_DIR/"
@@ -73,7 +108,3 @@ esac
 
 info "Vizier installed to $INSTALL_DIR/vizier"
 "$INSTALL_DIR/vizier" --version 2>/dev/null || true
-
-TMP_DIR="$(mktemp -d)"
-cd "$TMP_DIR"
-trap 'rm -rf "$TMP_DIR"' EXIT
