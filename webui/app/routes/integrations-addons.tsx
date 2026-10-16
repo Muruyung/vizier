@@ -32,7 +32,6 @@ export default function IntegrationsAddons() {
   return (
     <IntegrationsPage
       title="Addons"
-      subtitle="Extra tools for this agent. An addon’s settings are shared; installing it on an agent is per agent."
       readOnly={!canManage}
       actions={
         <div style={{ position: 'relative', width: 240, maxWidth: '45vw' }}>

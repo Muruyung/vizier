@@ -34,7 +34,6 @@ export default function IntegrationsChannels() {
   return (
     <IntegrationsPage
       title="Channels"
-      subtitle="Discord and Telegram bots this agent answers. A bot reconnects on its own; changing one never restarts the agent."
       readOnly={!canManage}
     >
       <div className="card-static" style={{ padding: 0 }}>

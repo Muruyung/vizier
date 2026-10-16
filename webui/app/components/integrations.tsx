@@ -31,13 +31,11 @@ export const isMasked = (value: unknown) => typeof value === 'string' && value.s
 /** Every Integrations page: a header with the page's actions, then its body. */
 export function IntegrationsPage({
   title,
-  subtitle,
   actions,
   readOnly,
   children,
 }: {
   title: string
-  subtitle: string
   actions?: ReactNode
   readOnly?: boolean
   children: ReactNode
@@ -45,10 +43,7 @@ export function IntegrationsPage({
   return (
     <>
       <div className="main-header" style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <h3 style={{ margin: 0 }}>{title}</h3>
-          <div style={{ fontSize: '0.8rem', color: 'var(--text-tertiary)' }}>{subtitle}</div>
-        </div>
+        <h3 style={{ margin: 0, flex: 1, minWidth: 0 }}>{title}</h3>
         {actions}
       </div>
       <div className="main-body" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>

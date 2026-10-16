@@ -139,7 +139,6 @@ export default function IntegrationsMcp() {
   return (
     <IntegrationsPage
       title="MCP servers"
-      subtitle="Model Context Protocol servers this agent can call from its scripts. Each agent keeps its own connection."
       readOnly={!canManage}
       actions={
         canManage && (
