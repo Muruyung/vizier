@@ -2,23 +2,66 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.12.1] - 2026-10-15
+## [0.13.0-rc.1] - 2026-10-16
 
 ### 🚀 Features
 
 - [**breaking**] Code mode by default, tool categories, <server>_<tool> MCP names [**breaking**]
 - Tell agents the Vizier version they run on
+- Add the src/llm provider layer and catalogue data model
+- Add media and embedding clients on the llm transport, pinned by rig fixtures
+- Add the catalogue handle, built-in providers, seed loading and model resolution
+- [**breaking**] Replace rig with the in-tree provider layer [**breaking**]
+- Agents use catalogue limits and handle images by capability
+- Catalogue read API, logos, SQLite cache and lazy conditional refresh
+- Custom providers API, full providers API, and estimated cost in usage
+- Catalogue-driven provider and model pickers, providers settings, cost in usage
+- 016 bots belong to their agent; Channels page as one row per platform [**breaking**]
+- 017 agents manage their own integrations; integrations are per-agent [**breaking**]
 
 ### 🐛 Bug Fixes
 
 - [**breaking**] Name sandbox catalogue entries by "name", not "function"
 - Dream journal listing without a limit, stale dream tool names
+- Pin fastembed 4.9.1 and sherpa-onnx 1.13.3 so release builds pass
+- Keep the WebUI chat consistent across page changes
+- Discord treats a typed /abort as the abort command
+
+### 💼 Other
+
+- Begin the 015 cutover from rig to src/llm (does not compile yet)
+
+### 🚜 Refactor
+
+- One agent form for create and edit
+- Drop subtitles from integrations page headers
+- Drop the redundant bot name from Channels rows
 
 ### 📚 Documentation
 
 - Spec 014 code mode by default, tool categories, simpler MCP tool names
 - Plan 014 code mode by default, tool categories, simpler MCP tool names
 - Tasks 014 code mode by default, tool categories, simpler MCP tool names
+- Spec 015 catalogue-driven providers, custom providers, simpler agent form
+- Plan 015 removes rig in one cutover after building the provider layer
+- Plan 015 simplifies the provider layer instead of porting rig's API
+- Spec/plan 015 lazy catalogue refresh cached in SQLite, seeded at build time
+- Plan 015 fetches the catalogue seed once per release
+- Record 015 implementation deviations and golden differences
+- Catalogue-driven providers, custom providers and catalogue settings
+- 015 end-to-end results and PR description
+- Record the live provider check
+- 016 retire agents:mcp_config in favour of integration permissions
+- 016 scope Integrations to the selected agent; add Misc › Config
+- 016 rename Services to Addons, app-store catalogue, Usage under Misc
+- 016 keep MCP tool names, namespace addon tools (brave_search_*)
+- 016 drop the upgrade migration
+
+### 🧪 Testing
+
+- Record golden fixtures from rig 0.39 and check every dialect against them
+- Run the 015 upgrade and retry quickstart checks end to end
+- Live-provider smoke tests per dialect; clippy fixes in the providers API
 
 ### ⚙️ Miscellaneous Tasks
 
@@ -28,6 +71,9 @@ All notable changes to this project will be documented in this file.
 - Upgrade rig-core 0.39, rmcp 3
 - Upgrade monty to 1.0.0
 - Enable speckit auto-commit hooks
+- Bump version to 0.12.1
+- Add model catalogue seed
+- Embed the catalogue seed at build time and add the stub LLM fixture
 ## [0.12.0] - 2026-10-14
 
 ### 🐛 Bug Fixes

@@ -1,7 +1,7 @@
 {
-  "etag": "\"a819b0deb7424bb618b9d1bacc5ce11e\"",
-  "fetched_at": "2026-10-15T06:07:39Z",
-  "models": 8871,
+  "etag": "\"69c8fa4b9a563aeadc381bb11c59d3e6\"",
+  "fetched_at": "2026-10-16T12:21:27Z",
+  "models": 8894,
   "no_logo": [
     "aion-labs",
     "aisingapore",
@@ -20,6 +20,7 @@
     "cortecs",
     "crof",
     "deepreinforce",
+    "fireworks",
     "gmicloud",
     "gryphe",
     "ibm",
