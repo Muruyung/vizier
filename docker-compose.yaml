@@ -1,19 +1,24 @@
-# Sample compose file for Vizier.
+# Sample compose file for Vizier, with Jaeger for traces.
 #
 # Persists sqlite data to a named volume and exposes the WebUI on port 9999.
-# Set VIZIER_JWT_SECRET in your shell, a .env file, or by editing this file.
-# Generate a strong value with: openssl rand -hex 32
+# Traces are exported over OTLP/HTTP to the bundled Jaeger, whose UI is on
+# port 16686. VIZIER_JWT_SECRET is required: set it in your shell or a .env
+# file next to this one. Generate a strong value with: openssl rand -hex 32
 #
 # Usage:
 #   echo "VIZIER_JWT_SECRET=$(openssl rand -hex 32)" > .env
 #   docker compose up -d
 #
-# Then open http://localhost:9999
+# Then open http://localhost:9999 (WebUI) and http://localhost:16686 (traces).
+#
+# To run without tracing, delete the jaeger service, vizier's depends_on and
+# the OTEL_* variables. See docs/src/configuration/observability.md for the
+# span attributes and how to send traces to another backend.
 
 services:
   vizier:
     image: blinfoldking/vizier:latest
-    # For production, pin a specific version (e.g. ...:0.10.0).
+    # For production, pin a specific version (e.g. ...:0.13.0).
     # Also published to ghcr.io/vizier-lab/vizier — either image works.
     container_name: vizier
     restart: unless-stopped
@@ -26,7 +31,30 @@ services:
       VIZIER_PORT: "9999"
       VIZIER_STORAGE: sqlite
       VIZIER_WORKERS: "4"
+      VIZIER_JWT_SECRET: ${VIZIER_JWT_SECRET:?set VIZIER_JWT_SECRET, e.g. in .env}
+      # Spans are emitted at info level, so keep vizier at info or lower.
       RUST_LOG: vizier=info
+      # OpenTelemetry: OTLP over HTTP (4318); the gRPC port is not supported.
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
+      # Jaeger stores traces only. Remove this when exporting to a collector
+      # that takes metrics too.
+      OTEL_METRICS_EXPORTER: none
+      OTEL_RESOURCE_ATTRIBUTES: deployment.environment=docker
+      # Records prompts, replies and tool arguments/results on the spans.
+      # They contain your users' messages: only enable it for a backend you control.
+      OTEL_INSTRUMENTATION_GENAI_CAPTURE_MESSAGE_CONTENT: "false"
+    depends_on:
+      - jaeger
+
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    container_name: vizier-jaeger
+    restart: unless-stopped
+    # Traces are kept in memory and lost when the container restarts.
+    ports:
+      - "16686:16686"
+    # OTLP (4317 gRPC / 4318 HTTP) is reachable by vizier on the compose
+    # network; publish "4318:4318" too if you want to send traces from the host.
 
 volumes:
   vizier-data:

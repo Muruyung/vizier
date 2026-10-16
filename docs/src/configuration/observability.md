@@ -18,7 +18,7 @@ The other standard `OTEL_EXPORTER_OTLP_*` variables (per-signal endpoints, heade
 - The protocol is **OTLP over HTTP (protobuf)**, usually port `4318`. The gRPC port `4317` is not supported.
 - The service is reported as `service.name=vizier`, with `service.version` set to the binary's version.
 - Spans pass through the same filter as logs. They are emitted at `info` level, so a `RUST_LOG` that hides `vizier` at `info` (e.g. `RUST_LOG=warn`) hides the spans too. With `RUST_LOG` unset, the default `vizier=debug` keeps them.
-- In Docker, set these variables on the container; `docker-entrypoint.sh` passes the environment through unchanged.
+- In Docker, set these variables on the container; `docker-entrypoint.sh` passes the environment through unchanged. The sample `docker-compose.yaml` runs Jaeger next to Vizier with export already set up (UI at `http://localhost:16686`).
 
 ```sh
 OTEL_EXPORTER_OTLP_ENDPOINT=http://collector:4318 vizier run
