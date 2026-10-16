@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0-rc.3] - 2026-10-16
+
+### 🚀 Features
+
+- Run Jaeger alongside vizier in the sample compose file and pass VIZIER_JWT_SECRET through [**breaking**]
+
+### 🐛 Bug Fixes
+
+- Tell agents their reply is delivered automatically, not through the send_message tools
 ## [0.13.0-rc.2] - 2026-10-16
 
 ### 🚀 Features
@@ -20,6 +29,10 @@ All notable changes to this project will be documented in this file.
 ### 📚 Documentation
 
 - Document OpenTelemetry export, spans, attributes and the Jaeger setup
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump version to 0.13.0-rc.2
 ## [0.13.0-rc.1] - 2026-10-16
 
 ### 🚀 Features
