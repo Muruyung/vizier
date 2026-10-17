@@ -2,6 +2,26 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0-rc.4] - 2026-10-17
+
+### 🚀 Features
+
+- Deferrable client tools and page controls for interactive pages
+- Themed style kit and built-in interactive-ui skill for interactive pages
+- Nudge agents to check skills before multi-step work
+- Editorial register and typography recipe for the interactive-ui skill
+- Scratchpad tools for temporary per-conversation notes
+
+### 📚 Documentation
+
+- Place interactive pages in the reply bubble as soon as they render
+- Let interactive pages save their own state
+- Plan client tools (019)
+- Break client tools (019) into tasks
+- Spec for scratchpad tools (020)
+- Scratchpad spec — durable storage, dream access
+- Plan for scratchpad tools (020)
+- Tasks for scratchpad tools (020)
 ## [0.13.0-rc.3] - 2026-10-16
 
 ### 🚀 Features
@@ -11,6 +31,10 @@ All notable changes to this project will be documented in this file.
 ### 🐛 Bug Fixes
 
 - Tell agents their reply is delivered automatically, not through the send_message tools
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump version to 0.13.0-rc.3
 ## [0.13.0-rc.2] - 2026-10-16
 
 ### 🚀 Features
