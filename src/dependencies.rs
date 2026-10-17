@@ -130,6 +130,7 @@ impl VizierDependencies {
         Self::interrupt_orphaned_task_runs(&storage).await?;
         Self::interrupt_orphaned_background_jobs(&storage).await;
         Self::interrupt_orphaned_client_calls(&storage).await;
+        crate::skill::builtin::seed_builtin_skills(&config.workspace, &storage).await;
         // Never blocks startup: it is retried on the next start until it has finished.
         if let Err(e) = Self::migrate_reply_usage(&storage, conn.clone()).await {
             tracing::error!("failed to carry reply usage over into usage accounting: {e}");

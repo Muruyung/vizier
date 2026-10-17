@@ -5,7 +5,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { CSP, PRINTED_MESSAGE, fileName, printDocument, srcdoc, standaloneDocument } from './pageDocument.ts'
+import { CSP, PRINTED_MESSAGE, baseStyle, fileName, printDocument, srcdoc, standaloneDocument } from './pageDocument.ts'
 
 test('the drawn page puts the policy and bridge ahead of the agent markup', () => {
   const doc = srcdoc('<p>hi</p>', { n: 1 }, { dark: false, palette: {} })
@@ -61,4 +61,23 @@ test('every page gets the theme colours as variables, with fallbacks', () => {
   assert.ok(doc.includes('--accent:#10B981'))
   assert.ok(doc.includes('--text:#1a1a1a'), 'missing colours fall back to the light theme')
   assert.ok(doc.includes('color-scheme:light'))
+})
+
+test('every page gets the series colours and the derived tokens', () => {
+  const doc = srcdoc('', null, { dark: true, palette: {} })
+  for (let i = 1; i <= 6; i++) assert.ok(doc.includes(`--series-${i}:#`), `series ${i}`)
+  for (const key of ['tint', 'accent-soft', 'accent-text', 'radius', 'shadow', 'font', 'mono']) {
+    assert.ok(doc.includes(`--${key}:`), key)
+  }
+  assert.ok(doc.includes('--ok-bg:#10291f'), 'status colours fall back to the dark theme')
+})
+
+test('the kit never outweighs a rule of the page', () => {
+  const css = baseStyle({ dark: false, palette: {} })
+  const selectors = [...css.matchAll(/(?:^|})([^{}]+)\{/g)].map((m) => m[1].trim())
+  const unwrapped = selectors.filter(
+    (s) => s !== ':root' && s !== '*,*::before,*::after' && s !== 'html,body' && !s.startsWith(':where(')
+  )
+  assert.deepEqual(unwrapped, [])
+  assert.ok(selectors.length > 40, 'the kit is there')
 })
