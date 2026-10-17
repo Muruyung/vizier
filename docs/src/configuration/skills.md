@@ -57,8 +57,8 @@ When both scopes have the same slug, the agent-scoped skill wins.
 There is no keyword matching or auto-injection. Instead:
 
 1. Whenever a skill is created, updated, deleted, or the agent boots, its `name + description + keywords` is embedded with the agent's embedding model and stored in the vector index (`skills` context). The body is **not** embedded — write descriptions and keywords that match how users will phrase requests.
-2. On every user message, the message is embedded and the top skills above a similarity threshold (≤10, cosine ≥ 0.5) are listed in a `# Possibly Related Skills` system section with their slug and description.
-3. The agent decides whether to call `use_skill` to load the full instructions.
+2. On every user message, the message is embedded and the top skills above a similarity threshold (≤5, cosine ≥ 0.4) are listed in a `## Possibly Related Skills` section of the message's `# Context` block with their slug and description.
+3. The agent decides whether to call `use_skill` (from an `execute_python` script) to load the full instructions. Its BOOT.md also tells it to check for a skill before multi-step or repeated work.
 
 Agents without an embedding/indexer get no recommendations but can still `list_skills`.
 

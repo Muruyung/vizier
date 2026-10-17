@@ -84,17 +84,13 @@ pub fn context_md(
     if !skills.is_empty() {
         let summarize_skills = skills
             .iter()
-            .map(|skill| {
-                format!(
-                    "### {}\nslug: **{}**\n{}\n**call get_skill_details or use_skill with this slug for more detail**\n---",
-                    skill.name, skill.name, skill.description
-                )
-            })
+            .map(|skill| format!("- **{}**: {}", skill.name, skill.description))
             .collect::<Vec<_>>()
             .join("\n");
 
         sections.push(format!(
-            "## Possibly Related Skills\nprovided below are skills that could be (but not always) related to the user message\n{}",
+            "## Possibly Related Skills\nSkills that may fit the message below. If one does, load it with \
+             `use_skill(slug=\"…\")` in an `execute_python` script and follow it before you start.\n\n{}",
             summarize_skills
         ));
     }

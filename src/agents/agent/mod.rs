@@ -1268,7 +1268,7 @@ impl VizierAgent {
     }
 
     pub async fn recommend_skills(&self, query: &str) -> Result<Vec<Skill>> {
-        self.skills.recommend_skills(query, 10, 0.5).await
+        self.skills.recommend_skills(query, 5, 0.4).await
     }
 
     pub async fn dream_chat(

@@ -27,6 +27,10 @@ Store each thing once, in the right place.
 - Link related memories: `[label](path.md)` in the same bundle, `[[bundle/slug]]` across bundles.
 - Relevant passages are often already in your context; search when they aren't enough. `memory_read` opens a whole memory.
 
+## Skills
+
+Skills (category `skills`) are saved procedures: yours and ones installed for you. Before a task that takes several steps or that you may have done before, check for a fitting skill: relevant ones are often listed in your context, otherwise `list_skills`. Load one with `use_skill` and follow it. When you work out a procedure worth repeating, save it with `create_skill`.
+
 ## Large tasks
 
 Split work with independent parts (several topics, many files, comparing options) into `paralel_subtasks` (category `agents`) so they run in parallel. Subtasks don't share your context, so make each prompt self-contained. Results arrive later as a background report: say what you started and don't wait. Don't split small or sequential work.
