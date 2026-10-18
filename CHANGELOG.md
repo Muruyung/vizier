@@ -2,7 +2,7 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.13.0-rc.4] - 2026-10-17
+## [0.13.0-rc.5] - 2026-10-18
 
 ### 🚀 Features
 
@@ -11,6 +11,14 @@ All notable changes to this project will be documented in this file.
 - Nudge agents to check skills before multi-step work
 - Editorial register and typography recipe for the interactive-ui skill
 - Scratchpad tools for temporary per-conversation notes
+- Show agent build and model download progress in the WebUI
+- Tools to get a session file's path and load a path as a session file
+- Highlight an invoked skill in the WebUI chat
+
+### 🐛 Bug Fixes
+
+- Point agents at the scratchpad for pages built in chunks
+- Let update_skill and delete_skill reach the agent's own skills
 
 ### 📚 Documentation
 
@@ -22,6 +30,10 @@ All notable changes to this project will be documented in this file.
 - Scratchpad spec — durable storage, dream access
 - Plan for scratchpad tools (020)
 - Tasks for scratchpad tools (020)
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump version to 0.13.0-rc.4
 ## [0.13.0-rc.3] - 2026-10-16
 
 ### 🚀 Features
