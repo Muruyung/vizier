@@ -1,6 +1,7 @@
 # Vizier
 
-> 21st Century Digital Steward; Right-hand agent for you majesty
+> **A digital steward for Your Majesty.**\
+> AI agents that remember who they are, and who you are. Hosted by you.
 
 Vizier is a Rust-based AI agent framework: a single binary that runs multiple concurrent AI agents — each with its own provider, tools, memory, and identity — exposed over Discord, Telegram, and HTTP (REST + WebSocket + a bundled React WebUI). Storage is embedded SQLite; no external services required.
 
