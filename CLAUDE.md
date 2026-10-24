@@ -17,6 +17,7 @@ just shutdown     # cargo run -- shutdown --config dev.vizier.yaml
 just build        # cd webui && npm run build
 just release      # cargo build --release
 just catalogue-update  # refresh assets/catalogue/ (models.dev seed + logos) — needs network
+just test-scripts  # node --test for scripts/*.mjs (the submodule PR automation)
 just jaeger       # local Jaeger in Docker (UI :16686, OTLP :4318); jaeger-down removes it
 just run-otel     # just run, exporting traces to that Jaeger with content capture on (dev-otel: hot reload)
 just docker       # docker-compose down && docker-compose up -d
@@ -166,7 +167,7 @@ Each agent's persistent "self" document is `CORE.md`, stored in storage (not the
 
 ## WebUI (`webui/`)
 
-The WebUI is the submodule `vizier-lab/webui` (spec 024), built on the `design/` submodule (`vizier-lab/design`, spec 022): React components on hand-written tokens, with a Storybook catalogue that is the source of truth for the design. A change to a component is made in `design/` first, then used in `webui/`, then vizier's pins are bumped (commit order: design → webui → vizier). The previous WebUI is in `legacy/` for reference only; don't edit it.
+The WebUI is the submodule `vizier-lab/webui` (spec 024), built on the `design/` submodule (`vizier-lab/design`, spec 022): React components on hand-written tokens, with a Storybook catalogue that is the source of truth for the design. A change to a component is made in `design/` first, then used in `webui/`, then vizier's pins are bumped (commit order: design → webui → vizier). Comment `/cascade-merge` on a vizier PR to merge all three in that order: `scripts/submodule-prs.mjs` (driven by `.github/workflows/submodule-prs.yml`) merges the linked submodule PRs, bumps the gitlinks to what landed, and merges the vizier PR — see `docs/src/getting-started/contributing.md`. The previous WebUI is in `legacy/` for reference only; don't edit it.
 
 React Router v7 (SPA, `ssr: false`) + React 19 + TypeScript + Tailwind v4, composing `@vizier/design` only. State in Zustand stores in `app/stores/`, pure logic with vitest tests in `app/lib/` (the turn reducer `lib/frames.ts`, the trail model `lib/trail.ts`, paging), the typed API client and topic socket in `app/api/` (`schema.d.ts` is generated from the server's OpenAPI by `scripts/openapi.mjs`), screens in `app/routes/` and `app/screens/`. `npm run dev` serves on `:5173` and proxies `/api` to vizier on `:9999`. Build output (`webui/build/client/`) is what the Rust HTTP channel serves at runtime — see the `build.rs` gotcha above.
 

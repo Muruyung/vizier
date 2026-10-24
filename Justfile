@@ -50,3 +50,7 @@ release:
 
 catalogue-update:
   python3 -I scripts/catalogue_update.py
+
+# Unit tests for the submodule PR linking/cascade automation.
+test-scripts:
+  node --test scripts/*.test.mjs
