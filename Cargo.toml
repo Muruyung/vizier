@@ -3,7 +3,7 @@ members = ["vizier-derive"]
 
 [package]
 name = "vizier"
-version = "0.13.0"
+version = "0.13.1"
 edition = "2024"
 authors = ["Ganesha Danu <hi@blinfoldking.dev>"]
 description = "A digital steward for Your Majesty"
@@ -118,7 +118,7 @@ sherpa-onnx-sys = "=1.13.3"
 similar = { version = "3", default-features = false, features = ["text"] }
 monty = "=1.0.0"
 monty-types = "=1.0.0"
-vizier-derive = { path = "vizier-derive", version = "0.13.0" }
+vizier-derive = { path = "vizier-derive", version = "0.13.1" }
 opentelemetry = "0.33"
 opentelemetry_sdk = "0.33"
 tracing-opentelemetry = "0.34"

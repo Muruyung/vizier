@@ -2,6 +2,11 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.1] - 2026-10-24
+
+### 🚀 Features
+
+- Add show_discord_chats/show_telegram_chats permissions, fix dream provider display
 ## [0.13.0] - 2026-10-24
 
 ### 🚀 Features
@@ -71,6 +76,7 @@ All notable changes to this project will be documented in this file.
 - Bump webui
 - Bump webui
 - Bump webui
+- Bump version to 0.13.0
 - Bump version to 0.13.0
 ## [0.13.0-rc.5] - 2026-10-18
 
