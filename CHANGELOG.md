@@ -37,6 +37,7 @@ All notable changes to this project will be documented in this file.
 - Dialogs, modals and slide-overs had no size; pin design and webui
 - Deploy the book from master, the default branch
 - Keep a person's attachments on the saved request so they show after reload
+- Bump design, sigil module name collided with Sigil.tsx on macOS
 
 ### 📚 Documentation
 
@@ -70,6 +71,7 @@ All notable changes to this project will be documented in this file.
 - Bump webui
 - Bump webui
 - Bump webui
+- Bump version to 0.13.0
 ## [0.13.0-rc.5] - 2026-10-18
 
 ### 🚀 Features
