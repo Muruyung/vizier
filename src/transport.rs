@@ -58,6 +58,8 @@ pub enum SessionFrame {
     HistoryEntry(crate::schema::SessionHistory),
     /// A file saved to the session: from a tool, or attached to a request.
     File(crate::schema::session_file::SessionFileRecord),
+    /// The session's title, after it was generated.
+    Title { title: String },
     /// A client tool call's newly saved state, echoed to the saver as its confirmation.
     ClientCallState {
         call_id: String,

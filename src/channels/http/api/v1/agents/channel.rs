@@ -800,6 +800,9 @@ pub async fn handle_socket(
                             SessionFrame::File(file) => {
                                 Some(serde_json::json!({ "session_file": { "file": file } }).to_string())
                             }
+                            SessionFrame::Title { title } => {
+                                Some(serde_json::json!({ "session_title": { "title": title } }).to_string())
+                            }
                             SessionFrame::ClientCallState { call_id, state } => Some(
                                 serde_json::json!({
                                     "client_call_state": { "call_id": call_id, "state": state }

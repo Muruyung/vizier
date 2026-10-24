@@ -33,7 +33,7 @@ use crate::{
         history::{HistoryStorage, save_with_busy_retry},
         memory::MemoryStorage, scratch::ScratchStorage, session::SessionStorage, turn::TurnStorage,
     },
-    transport::{DreamCommand, VizierRequestEnvelope, VizierTransport},
+    transport::{DreamCommand, SessionEvent, SessionFrame, VizierRequestEnvelope, VizierTransport},
 };
 
 /// Requests waiting for the session's running job, each with where its response goes.
@@ -164,6 +164,7 @@ pub async fn agent_process(
                     session.clone(),
                     request.clone(),
                     titling.clone(),
+                    deps.transport.clone(),
                 ));
 
                 // Handle abort command
@@ -443,10 +444,6 @@ async fn hand_on_queued(
     }
 }
 
-/// A session titled from the topic slug gets a generated title once it has this many
-/// requests stored.
-const TITLE_AFTER_REQUESTS: usize = 10;
-
 /// Sessions with a title being generated, so a burst of messages (a busy group chat) starts
 /// one generation rather than one each. Holds only generations in flight.
 type TitlingSessions = Arc<std::sync::Mutex<std::collections::HashSet<VizierSession>>>;
@@ -488,9 +485,11 @@ async fn refresh_session_detail(
     session: VizierSession,
     request: VizierRequest,
     titling: TitlingSessions,
+    transport: VizierTransport,
 ) {
     let VizierSession(agent_id, channel, topic) = session.clone();
     let slug_title = topic.clone().unwrap_or("DEFAULT".to_string());
+    let titled_session = session.clone();
 
     let existing = match storage
         .get_session_detail_by_topic(agent_id.clone(), channel.clone(), topic.clone())
@@ -502,27 +501,25 @@ async fn refresh_session_detail(
             return;
         }
     };
-    let Some(existing) = existing else {
-        let detail = VizierSessionDetail {
-            agent_id,
-            channel,
-            topic,
-            title: slug_title,
-            is_thinking: true,
-        };
-        let _ = storage.save_session_detail(detail).await;
-        return;
+    // A session without a detail row is new: record it, then title it from this first request.
+    let existing = match existing {
+        Some(existing) => existing,
+        None => {
+            let detail = VizierSessionDetail {
+                agent_id: agent_id.clone(),
+                channel: channel.clone(),
+                topic: topic.clone(),
+                title: slug_title.clone(),
+                is_thinking: true,
+            };
+            let _ = storage.save_session_detail(detail.clone()).await;
+            detail
+        }
     };
 
     // Titled already, by generation or by someone renaming it.
     if existing.title != slug_title {
         return;
-    }
-    // The turn saves this request concurrently, so the count may or may not include it yet:
-    // the title comes on the tenth request or the one after.
-    match storage.count_session_requests(session.clone()).await {
-        Ok(count) if count >= TITLE_AFTER_REQUESTS => {}
-        _ => return,
     }
     let Some(_claim) = TitlingClaim::take(&titling, &session) else {
         return;
@@ -568,10 +565,15 @@ async fn refresh_session_detail(
         agent_id,
         channel,
         topic,
-        title,
+        title: title.clone(),
         is_thinking: existing.is_thinking,
     };
-    let _ = storage.update_session_detail(detail).await;
+    if storage.update_session_detail(detail).await.is_ok() {
+        transport.publish_session_event(SessionEvent {
+            session: titled_session,
+            frame: SessionFrame::Title { title },
+        });
+    }
 }
 
 /// What every job started on a session needs, shared by the two places one starts: a
