@@ -2,6 +2,74 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.0] - 2026-10-24
+
+### 🚀 Features
+
+- Record turn steps as they happen and push them to watchers
+- Journal durable requests and track each turn's row
+- Resume turns that were running when vizier went down
+- Resume turns across agent updates and mark resumed replies
+- Abort drops journaled turns; test handover re-send order
+- Recover background jobs backed by pending turns
+- Recover task runs backed by pending turns
+- Durable-turns e2e script and docs
+- Add opt-in paging model for list endpoints
+- Foundation for the WebUI rewrite (shell, routes, paging)
+- Recall history entries, session file frames and listing, Range downloads, agent restart
+- Chat for the WebUI rewrite (US1) and pins
+- Paging on agents, tasks, skills and bundles; CORE and skill stale-save checks; dream nights and cycles with change attribution
+- US3 day-to-day pages, task is_active, and pins
+- US4 MCP listing paging; pin design and webui
+- US5 public status, paged users/roles/api keys, key prefix; pin webui
+- US6 overview, feed and conversations APIs, visit tracking, seed script; pin design and webui
+- US7 pins
+- Agent health reports live while a turn runs; pin design and webui
+- Motion across the WebUI; pin design and webui
+- Split paralel_subtasks into parallel_subagents and background_subagents [**breaking**]
+- Title a session from its first request and push the title live
+- Ends_turn flag makes a successful tool call the turn's final answer
+- [**breaking**] Generative UI replaces render_interactive_ui
+
+### 🐛 Bug Fixes
+
+- Pin webui for the calmer screen changes
+- Dialogs, modals and slide-overs had no size; pin design and webui
+- Deploy the book from master, the default branch
+- Keep a person's attachments on the saved request so they show after reload
+
+### 📚 Documentation
+
+- Adopt new tagline "A digital steward for Your Majesty"
+- Make storybook the design source of truth, drop figcraft integration
+- Mark the Picker task done
+- Record the quickstart checks for the design library
+- Spec 024 covers home activity dots and dream timeline
+- Spec 024 covers chat turn internals (recalled memory, session files, context ring)
+
+### ⚙️ Miscellaneous Tasks
+
+- Add design library submodule
+- Bump design library
+- Bump design library
+- Move the old WebUI to legacy/ and add the webui submodule
+- Build, CI and docs use the webui and design submodules; legacy/ is reference only
+- Pin design
+- Pin design and webui for the rewrite; role lookup, docs for the new endpoints
+- Tasks: T059 walked
+- Tasks: T137 done (#82 updated)
+- Pin design and webui
+- Pin design and webui
+- Remove legacy webui
+- Pin design and webui
+- Bump design and webui for the live trail head
+- Bump design and webui for generative UI
+- Bump webui for logic runner and surfaces
+- Bump webui for links and media
+- Bump webui
+- Bump webui
+- Bump webui
+- Bump webui
 ## [0.13.0-rc.5] - 2026-10-18
 
 ### 🚀 Features
@@ -34,6 +102,7 @@ All notable changes to this project will be documented in this file.
 ### ⚙️ Miscellaneous Tasks
 
 - Bump version to 0.13.0-rc.4
+- Bump version to 0.13.0-rc.5
 ## [0.13.0-rc.3] - 2026-10-16
 
 ### 🚀 Features
