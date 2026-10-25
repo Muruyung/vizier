@@ -93,16 +93,16 @@ One notification is a **card**: a bordered `rounded-lg` surface with the agent's
 └───────────────────────────────────────────────┘
 ```
 
-- **No unread gutter or dot.** Unread is carried by the summary's tone (softer for unread, muted for read; `failed`/`success` keep their tone) and a visually hidden `Unread` in the row's accessible text. Read and unread rows therefore have the same shape and never shift when marked.
+- **No unread gutter or dot.** The read toggle's **eye** is also the state: closed (`eye-closed`) means unread, open (`eye`) means read. It sits on the title line, immediately **left of the time**, and is always visible so unread rows are scannable. The card itself steps up (`bg-raised`) when unread and is flat (`bg-surface`) when read; the summary tone follows (`text-soft` unread, `text-muted` read; `failed`/`success` keep their tone), and a visually hidden `Unread` is in the row's accessible text. Read and unread rows keep the same shape.
 - **Sigil**: the agent's identicon, `md` (34px).
 - **Title**: the agent's name (the agent store, falling back to `agent_id`).
 - **Time**: `feedTime` (`14:02`, `yesterday`, `Oct 21`), mono/faint, right-aligned on the title line.
 - **Subtitle**: the stored summary, `type-ui-para`.
-- **Action**: an `IconButton` at the card's right, a **sibling** of the row's text button (valid HTML; a click never navigates):
-  - unread → `check`, accessible name `Mark as read`
-  - read → `rotate-ccw`, accessible name `Mark as unread`
-  - desktop: hidden until the card is hovered or the control focused; phone: always visible.
-- **Card click**: navigates to `href` and marks the notification read. The card is the text button; the action sits beside it inside the border.
+- **Read toggle**: an `IconButton` beside the time, a **sibling** of the row's text button (valid HTML; a click never navigates):
+  - unread → `eye-closed`, accessible name `Mark as read`
+  - read → `eye`, accessible name `Mark as unread`
+  - always visible: it is the unread indicator as well as the action.
+- **Card click**: navigates to `href` and marks the notification read. The text button holds the sigil, agent and summary; the eye and the time share the top-right meta column.
 - Rows are stacked with an 8px gap; there are no divider lines.
 - Long summaries wrap; the full text stays available to assistive technology.
 
@@ -116,6 +116,7 @@ When the list is **closed** and the 15 s poll finds a new notification, the shel
 - A burst (several at once): one toast, `N new notifications`, whose action opens the panel.
 - It dismisses itself: about 6 s, 8 s for a failure. The inbox still holds the row; the toast is a nudge, not the record.
 - No toast while the panel is open — the row is already at the top of the list.
+- A `chat_reply` for the conversation currently on screen is neither toasted nor counted: it is marked read immediately, so the bell does not move for a reply the person is already looking at. A reply for another conversation toasts normally.
 
 ## 6. States
 
@@ -158,7 +159,7 @@ When the list is **closed** and the 15 s poll finds a new notification, the shel
 - The header bell is a button with an accessible name including “Notifications”, the unread count and the busy state. The badge is not the only carrier.
 - The panel is a modal dialog named `Notifications`; focus is trapped, Escape closes, focus returns to the bell.
 - Filters are a named group (`Filter notifications`) with pressed state; counts are read with the labels.
-- Unread is never colour-only: the row's accessible name says `Unread` and the summary's tone changes.
+- Unread is never colour-only: the row's accessible name says `Unread`, the eye is closed, the card is raised and the summary tone changes.
 - Failure is conveyed by wording and colour; ready uses wording; unread uses the summary's tone and the hidden word (no dot).
 - The setup card is `role="status"`; the progress bar has `aria-valuemin/max/now` and a label, or is indeterminate.
 - The mark action has an explicit label; its hit area is large enough on touch; it is keyboard reachable and visible on focus.
