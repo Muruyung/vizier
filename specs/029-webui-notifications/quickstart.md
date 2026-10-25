@@ -1,0 +1,258 @@
+# Quickstart: WebUI Notifications
+
+**Feature**: `029-webui-notifications`
+
+This checks the feature against a running binary, mostly on the offline `dummyplug` provider (spec `008-dummyplug-provider`). The dummyplug protocol is `specs/008-dummyplug-provider/contracts/dummyplug-protocol.md`; agent tool calls go through `execute_python` (code mode). Steps marked **LIVE** need a real provider, Ollama or network and are not part of the offline gate; everything else is offline.
+
+Run against a scratch workspace so the synthetic history and notifications do not pollute a real install:
+
+```sh
+rm -rf /tmp/vizier-notifications
+cargo run -- run --workspace /tmp/vizier-notifications --port 9999 2>&1 | tee /tmp/vizier-notifications.log
+```
+
+On first run, complete onboarding in the browser (create the admin), or create it directly:
+
+```sh
+curl -s localhost:9999/api/v1/auth/setup \
+  -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"admin"}'
+```
+
+In another shell:
+
+```sh
+TOKEN=$(curl -s localhost:9999/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  -d '{"username":"admin","password":"admin"}' | jq -r .data.token)
+API=localhost:9999/api/v1
+auth=(-H "authorization: bearer $TOKEN" -H 'content-type: application/json')
+```
+
+Create a dummyplug agent `dp-a` (the WebUI's New agent flow works too; the offline e2e fixture uses `POST /api/v1/agents` with `provider: "dummyplug"`, `model: "dummyplug"`):
+
+```sh
+curl -s "${auth[@]}" "$API/agents" -d '{
+  "agent_id":"dp-a","name":"Dp A","description":"notifications quickstart",
+  "provider":"dummyplug","model":"dummyplug"
+}' | jq .data.agent_id
+```
+
+## 1. Integration notification, counts and filters
+
+Add an MCP integration (the command does not need to work; saving is the event):
+
+```sh
+curl -s "${auth[@]}" -X POST "$API/agents/dp-a/integrations" -d '{
+  "kind":"mcp","name":"notify-mcp",
+  "settings":{"transport":"local","command":"cat"}
+}' | jq '.data.integration.name'
+```
+
+Expect `notify-mcp` and a `201`. Read the inbox:
+
+```sh
+curl -s "${auth[@]}" "$API/notifications" | jq '.data'
+```
+
+Expect one `category: "integration"`, `tone: "default"`, text `admin added notify-mcp.`, `href: "/dp-a/integrations/mcp"`, `read: false`, and counts `{all:1, unread:1, read:0}`. `admin` is the signed-in username; the actor name is resolved at creation, not read time.
+
+Check the filters and the badge endpoint:
+
+```sh
+curl -s "${auth[@]}" "$API/notifications/count" | jq .data
+curl -s "${auth[@]}" "$API/notifications?filter=unread" | jq '.data.items | length'
+curl -s "${auth[@]}" "$API/notifications?filter=read" | jq '.data.items | length'
+```
+
+Expect `{all:1, unread:1, read:0}`, then `1`, then `0`. An unknown filter is `400`.
+
+## 2. Read state, mark-all and persistence
+
+Take the id from §1 and mark it read:
+
+```sh
+ID=$(curl -s "${auth[@]}" "$API/notifications" | jq -r '.data.items[0].id')
+curl -s "${auth[@]}" -X PUT "$API/notifications/$ID/read" -d '{"read":true}' | jq .data
+```
+
+Expect `{all:1, unread:0, read:1}`. The `read` filter now has the row; `unread` is empty. Repeat the same `PUT`; counts are unchanged (idempotent). Mark it unread:
+
+```sh
+curl -s "${auth[@]}" -X PUT "$API/notifications/$ID/read" -d '{"read":false}' | jq .data
+```
+
+Then `POST /notifications/read-all`:
+
+```sh
+curl -s "${auth[@]}" -X POST "$API/notifications/read-all" | jq .data
+```
+
+Expect `unread: 0`. Add a second integration (`notify-mcp-2`), check unread is 1, mark all read, then stop and restart the process (Ctrl-C, then rerun the same `cargo run -- run --workspace ...` command) and sign in again: the read state must survive. A missing/invisible id returns `404`:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' "${auth[@]}" -X PUT "$API/notifications/999999/read" -d '{"read":true}'
+```
+
+## 3. Task run notification (dummyplug)
+
+Create a one-time task that fires in about a minute:
+
+```sh
+WHEN=$(date -u -d '+90 seconds' +%Y-%m-%dT%H:%M:%SZ)   # macOS: date -u -v+90S +%Y-%m-%dT%H:%M:%SZ
+curl -s "${auth[@]}" -X POST "$API/agents/dp-a/tasks" -d "{
+  \"slug\":\"notify-task\",\"title\":\"Notify task\",\"instruction\":\"Say hello\",
+  \"schedule\":{\"type\":\"OneTime\",\"datetime\":\"$WHEN\"},\"is_active\":true
+}" | jq '.data.slug'
+```
+
+Wait for the scheduler tick (it checks every minute) and for the dummyplug turn to answer. Poll until the task notification appears:
+
+```sh
+for i in $(seq 1 36); do
+  curl -s "${auth[@]}" "$API/notifications?filter=all" | jq -r '.data.items[] | select(.category=="task_run") | .text' | grep -q . && break
+  sleep 5
+done
+curl -s "${auth[@]}" "$API/notifications?filter=all" | jq '.data.items[] | select(.category=="task_run")'
+```
+
+Expect `Task “Notify task” answered.` (tone `default`) and the task-run href `.../tasks?task=notify-task&run=...`. A run that ends in `Abort`/`Empty`/no message becomes `ended without an answer.` and tone `failed`; a restart-interrupted run becomes `was interrupted.`. The title is captured at fire time; deleting the task later leaves the notification readable.
+
+## 4. Background job notification (dummyplug)
+
+Ask the agent for the tool schema and start a background batch from a script:
+
+```json
+{"tool":"describe_tool_function","arguments":{"name":"background_subagents"}}
+```
+
+Then send:
+
+```json
+{"tool":"execute_python","arguments":{"code":"print(background_subagents(tasks=[{'prompt': 'Say hello from a background piece'}], timeout_secs=30))"}}
+```
+
+Expect `Started background batch …`. When the piece answers and the report is delivered, a `background_job` notification appears:
+
+```sh
+curl -s "${auth[@]}" "$API/notifications?filter=all" | jq '.data.items[] | select(.category=="background_job")'
+```
+
+Expect `Background batch reported back.` and href `/{agent}/chat`. A cancelled job reads `was cancelled (reason).`; a job lost to a restart reads `was lost when vizier restarted.`; an undelivered report reads `finished, but its report could not be delivered.` A job still `running` or `reporting` has no notification.
+
+## 5. Agent start failure (offline, custom provider)
+
+This uses a real persisted agent whose provider is removed, not a dummyplug turn.
+
+1. In Settings › Providers, add a custom OpenAI-compatible provider (any base URL) named `notify-custom`, then create an agent `dp-fail` using it. Let it start successfully.
+2. Delete `notify-custom` in Settings › Providers. The agents using it restart; the build cannot resolve the provider.
+3. Poll the inbox for a `agent_start_failure`:
+
+```sh
+for i in $(seq 1 36); do
+  curl -s "${auth[@]}" "$API/notifications" | jq -r '.data.items[] | select(.category=="agent_start_failure") | .text' | grep -q . && break
+  sleep 2
+done
+curl -s "${auth[@]}" "$API/notifications" | jq '.data.items[] | select(.category=="agent_start_failure")'
+```
+
+Expect one `Failed to start: … Retrying in …s.` with tone `failed` and `href: "/dp-fail/config"`. Wait through at least one retry; the count of this notification must stay **1** for the same failure episode. Open `dp-fail`'s chat: the failed banner (Retry now / Open config) must still be there; the detailed starting card must not be.
+
+Recovery-ready is covered by the supervisor test: a successful build after a failed attempt **within the same supervisor retry loop** adds one `agent_setup_ready` even if the retry reused cached artifacts. A manual provider restore restarts the supervisor, so it is a new start rather than that retry; delete `dp-fail` when done.
+
+Clean up by deleting `dp-fail` or recreating the provider.
+
+## 6. Live setup, ready and the download rule — **LIVE**
+
+Use a scratch agent on Ollama, or restart vizier after removing the model from Ollama so the boot build downloads it asynchronously.
+
+1. With the model absent (`ollama rm <model>`), restart vizier. Open Notifications on another screen.
+2. While the build runs, the sidebar shows the **activity indicator**, not an unread count for the setup. The panel's Setup section shows `Starting <name>…`, the current step, percent/bytes when known, an indeterminate bar when the size is unknown, the ETA when measurable, and one line per download; it updates about once a second. The card is not in the list and has no read action.
+3. When the download finishes, one unread `agent_setup_ready` appears: `<name> is ready.` (tone `success`), the activity indicator clears, and the Setup section disappears.
+4. Restart vizier again with the model cached. A quick restart shows live activity only and adds **no** ready notification.
+5. Break the pull (for example stop Ollama after the build starts, or use an unreachable base URL) and restart: the start-failure notification is the one from §5; the setup board does not add a second failure. The chat's compact line explains the queue; the failure banner remains.
+
+The offline Rust tests cover the download epoch, the ready flag and one-failure-per-episode; the live run verifies the real progress UI and the real Ollama download.
+
+## 7. Channel-reply projection (offline fixture)
+
+The current hour must not appear; a closed hour must become exactly one notification per conversation. With `dp-a` created:
+
+```sh
+DB=/tmp/vizier-notifications/vizier.db
+HOUR_MS=3600000
+NOW=$(date +%s%3N)
+PREV_HOUR=$(( NOW / HOUR_MS - 1 ))
+PREV=$(( PREV_HOUR * HOUR_MS + 60000 ))   # one minute into the previous hour
+# The app may already have projected this hour; rewind the watermark so this fixture
+# is treated as a newly closed batch (the projection is idempotent).
+sqlite3 "$DB" "INSERT OR REPLACE INTO state (key,value) VALUES ('notifications.replies_through','$((PREV_HOUR-1))');"
+sqlite3 "$DB" <<SQL
+INSERT INTO session_history (uid, agent_id, channel, topic, timestamp, content_type, data, seq)
+VALUES ('fixture-r1','dp-a','discord__fixture',NULL,$PREV,'Response','{}',1),
+       ('fixture-r2','dp-a','discord__fixture',NULL,$((PREV+5000)),'Response','{}',2);
+SQL
+curl -s "${auth[@]}" "$API/notifications" | jq '.data.items[] | select(.category=="channel_replies")'
+```
+
+Expect one `Replied 2 times in a Discord conversation.` with href `/dp-a/chat?channel=discord__fixture`, created at the later reply. Inserting a third row in the **current** hour and calling again must not add or change the batch. Restarting and calling again must not duplicate it (the unique `reply:{agent}:{channel}:{hour}` key and the watermark).
+
+The first activation watermark starts at the last closed hour, so no historical replies are imported; a 30-day catch-up is capped by the retention window.
+
+## 8. Dream notification — **LIVE**
+
+Dummyplug produces no journal entries, so this is a live check:
+
+1. Use a real provider; enable the dream cycle for an agent with at least one user conversation.
+2. Trigger a dream (`POST`/the WebUI Dream button) and let it finish.
+3. Expect one `dream_cycle` notification: `Dreamed: 1 journal entry.` / `Dreamed: {n} journal entries.` with the dream-cycle href. A cycle that wrote no entries produces none.
+
+The offline test covers the count/wording path; this verifies the real consolidation writes entries.
+
+## 9. Visibility, retention and agent deletion
+
+1. As a person who may see only `dp-a`, `GET /notifications` contains only `dp-a` rows; `GET /notifications/count` does not count another agent's rows. Asking to mark another agent's id read returns `404`.
+2. Revoke that person's access to `dp-a`; reload: the rows and the unread count are gone from their view, while the notification rows remain for people who can see it.
+3. Insert an old notification directly to verify the window:
+
+```sh
+OLD=$(( $(date +%s%3N) - 31*24*3600*1000 ))
+sqlite3 "$DB" "INSERT INTO notification (event_key,agent_id,category,tone,summary,href,created_at)
+VALUES ('fixture-old','dp-a','task_run','default','old','/dp-a/tasks','$OLD');"
+curl -s "${auth[@]}" "$API/notifications" | jq '[.data.items[] | select(.text=="old")] | length'
+```
+
+Expect `0`, and the count endpoint must not include it. Restart (or the daily purge) and check `select count(*) from notification where event_key='fixture-old';` is `0`.
+
+4. Delete `dp-a`; check:
+
+```sh
+sqlite3 "$DB" "select count(*) from notification where agent_id='dp-a';
+                select count(*) from notification_read r join notification n on n.id=r.notification_id where n.agent_id='dp-a';"
+```
+
+Expect `0` and `0` (the read rows cascade). Existing notifications for other agents are untouched.
+
+## 10. Home, sidebar, phone and accessibility
+
+With at least one unread notification:
+
+1. On a desktop, open any screen: the sidebar shows `Notifications` immediately above `Settings`, with the count. The collapsed rail shows the bell and a dot/count, and the tooltip names the unread count.
+2. Open it: a right-hand 440px panel over the current screen. All / Unread / Read show counts; select `Unread`, mark one read, mark another unread, then `Mark all read`; the badge clears and the list updates. Open a row: the destination opens and the row is read when you come back. Escape closes and focus returns to the entry.
+3. Home no longer contains `Since you were away` or a reserved right column; the greeting, activity grid and court use the width. Mobile Home is unchanged.
+4. At 390px, open the drawer → `Notifications`: a full-screen sheet with the same content. The setup card is full width, the filters fit/wrap, the mark action is always visible (no hover), and closing returns to the previous screen. The panel has no horizontal scroll and clears the bottom safe area.
+5. With a screen reader, the entry announces the unread count and busy state; the dialog is named `Notifications`; each row announces the agent, unread state, text and time; the action has a label; failure is not conveyed by colour alone.
+6. Open the chat while an agent is starting: only the compact `Starting … · View in Notifications` line and the queue note are there; the detailed card is in the panel. A failed agent still has the failed banner with Retry now / Open config.
+
+Playwright covers the same paths: `cd webui && npm run e2e -- notifications.spec.ts`. The phone project asserts the full-screen dialog and no horizontal overflow.
+
+## 11. Final checks
+
+```sh
+cargo fmt --check
+cargo clippy --all-targets
+cargo test
+cd webui && npm test && npm run typecheck && npm run e2e
+```
+
+All must pass. Confirm the old feed is gone (`grep -r "overview/feed\|Since you were away\|AwayFeed" src webui docs` → no hits) and that a notification read/write needs no network. Delete `/tmp/vizier-notifications` when done.
