@@ -18,6 +18,8 @@ That panel has three limits. It lives only on Home and only on wide screens, so 
 
 This feature turns those notable events into a per-person **notification inbox**: a Notifications entry in the app navigation, immediately above Settings, carrying an unread badge and opening a list that can be filtered to all, unread or read notifications. The “Since you were away” panel and its previous-visit boundary are replaced; the same notable events remain available from the notifications entry on every screen.
 
+Today an agent's setup — building, pulling a chat model from its provider, fetching an embedding, speech-to-text or text-to-speech model, and reaching ready or failed — is shown as a large card inside that agent's chat, and only while the person stays there. This feature also gives setup a home in the notification panel: live progress for any agent while it runs, and a durable ready or failed outcome when it ends.
+
 Read state belongs to each person. Two people who can see the same agent share the notification itself but not its read state. Notifications are in-app only: no email, chat-platform message, desktop notification or sound. Per-category preferences, muting, search and grouping are out of scope for this release.
 
 ## User Scenarios & Testing *(mandatory)*
@@ -83,26 +85,47 @@ A person used to rely on Home's “Since you were away” panel. After this chan
 
 ---
 
-### User Story 4 - See only what belongs to you and what you may see (Priority: P2)
+### User Story 4 - Watch setup and downloads from the notification panel (Priority: P2)
 
-A person who manages only one agent does not see notifications for agents they do not own. When their access to an agent is revoked, that agent's notifications disappear from their list and badge on the next refresh. When an agent is deleted, its notifications disappear for everyone. Another person's read choices never affect theirs.
+A person switches an agent to a larger model and leaves its chat to work elsewhere. The Notifications entry shows a small activity indicator. Opening it reveals a live setup section: the agent's name, “Starting Scribe…”, “Pulling qwen3:32b”, 42%, 8.2 GB of 20.0 GB and “about 4 min”. Messages to that agent wait in line. The person closes the panel and keeps working. When the pull finishes, an unread “Scribe is ready.” notification appears and the activity indicator stops. If the download fails, one failure notification names what failed and links to the agent's configuration, and the chat's failure banner still offers retry.
 
-**Why this priority**: The old feed already respected agent visibility. A cross-agent inbox that leaks other agents' activity, or that keeps orphaned notifications, is a security and correctness problem.
+**Why this priority**: Setup and downloads are the longest unattended work in the product, and today the only progress is a card inside one agent's chat. Moving that progress into notifications is what lets a person leave the chat without losing sight of it.
 
-**Independent Test**: With two people having different agent access, confirm each sees only their agents' notifications and their own read state. Revoke access while the list is open, delete an agent, and confirm disappearance and badge updates. Attempt to reach another person's notification list through a direct route.
+**Independent Test**: Point an agent's model at a model that is not downloaded yet, leave its chat, and watch the Notifications entry and panel: the current step, percent/bytes and ETA; messages queue; closing and reopening keeps the live state. Confirm one ready notification after completion and one failure notification when the download is made to fail, with no duplicate from the start-failure category. Then do a quick restart with no download and confirm no persistent notification.
 
 **Acceptance Scenarios**:
 
-1. **Given** a person and their visible agents, **When** the list or badge is read, **Then** only notifications for those agents are included.
-2. **Given** a person's access to an agent, **When** it is revoked, **Then** that agent's notifications leave the list and the unread count on the next refresh.
-3. **Given** an agent, **When** it is deleted, **Then** none of its notifications or read states remain for any person.
+1. **Given** an agent enters setup, **When** the person opens Notifications anywhere, **Then** a live setup section appears above the filters with the agent, the current step and its progress, regardless of the selected filter.
+2. **Given** a download is running, **When** it progresses, **Then** the panel shows percent and bytes when the total is known, an indeterminate indicator when it is not, and the source's status; multiple downloads for one agent are shown together.
+3. **Given** setup is running, **When** the person closes the panel, **Then** the navigation entry shows a separate activity indicator and the unread count does not include the running setup.
+4. **Given** setup downloaded at least one artifact, **When** it finishes ready, **Then** one unread “Scribe is ready.” notification appears, the live item disappears and the activity indicator stops.
+5. **Given** setup fails, **When** it ends failed, **Then** exactly one failure notification names the error and links to the agent's configuration; the chat still shows its actionable failure banner; the notification is the same one as the agent start-failure category.
+6. **Given** a quick restart with no download, **When** it completes, **Then** no persistent notification is created and the live activity simply disappears.
+7. **Given** an agent is still being created, **When** its creator opens Notifications, **Then** the live setup is visible to them; if the agent is never created, no outcome notification remains.
+8. **Given** a setup outcome, **When** the person uses All, Unread or Read, **Then** it follows the same read state, paging and retention rules as every other notification.
+
+---
+
+### User Story 5 - See only what belongs to you and what you may see (Priority: P2)
+
+A person who manages only one agent does not see notifications — or live setup — for agents they do not own. When their access to an agent is revoked, that agent's notifications and live setup disappear from their view on the next refresh. When an agent is deleted, its notifications disappear for everyone. Another person's read choices never affect theirs.
+
+**Why this priority**: The old feed already respected agent visibility. A cross-agent inbox that leaks other agents' activity, or that keeps orphaned notifications, is a security and correctness problem.
+
+**Independent Test**: With two people having different agent access, confirm each sees only their agents' notifications, live setup and their own read state. Revoke access while the list is open, delete an agent, and confirm disappearance and badge updates. Attempt to reach another person's notification list through a direct route.
+
+**Acceptance Scenarios**:
+
+1. **Given** a person and their visible agents, **When** the list, badge or live setup is read, **Then** only items for those agents are included.
+2. **Given** a person's access to an agent, **When** it is revoked, **Then** that agent's notifications and live setup leave the list and the unread count on the next refresh.
+3. **Given** an agent, **When** it is deleted, **Then** none of its notifications, read states or live setup remain for any person.
 4. **Given** two people who can both see the same agent, **When** one marks a notification read, **Then** the other's state is unchanged.
 5. **Given** no valid session, **When** any notification read is attempted, **Then** it is refused and no notification content is returned; a signed-in person's list never contains another person's agents.
 6. **Given** notifications older than the retention period, **When** the list is read, **Then** they are not included and the unread count does not include them.
 
 ---
 
-### User Story 5 - Stay current while the app is open (Priority: P2)
+### User Story 6 - Stay current while the app is open (Priority: P2)
 
 A person leaves vizier open on a chat. A background job finishes. Within half a minute the badge rises without a reload; when they open the list, the new item is at the top. In a second tab, they mark it read; the first tab's badge and list update without a reload.
 
@@ -120,7 +143,7 @@ A person leaves vizier open on a chat. A background job finishes. Within half a 
 
 ---
 
-### User Story 6 - Use it on a phone and with assistive technology (Priority: P3)
+### User Story 7 - Use it on a phone and with assistive technology (Priority: P3)
 
 A person on a phone opens the navigation drawer, finds Notifications above Settings, and gets the same list full-screen. A keyboard-only person can reach the entry, open the list, move through rows, read them with a screen reader, mark read/unread and close with Escape. Failure is not conveyed by colour alone.
 
@@ -155,6 +178,18 @@ A person on a phone opens the navigation drawer, finds Notifications above Setti
 - **No visible agents**: the list is empty and no events from outside the person's visibility are inferred or shown.
 - **Failed load or offline**: the person sees an error with retry; the interface never silently presents an empty inbox as if nothing happened.
 - **Own action**: a change the person made themselves still appears as a notification, matching the old panel's coverage.
+- **Two agents setting up at once**: both live items appear, the navigation activity indicator reflects that setup is running, and each outcome is notified independently.
+- **Several downloads for one agent**: the model, embedding and speech artifacts are listed together; one finishing does not create a notification on its own.
+- **Unknown download size**: progress is indeterminate, no percentage is invented, and no ETA is shown until it can be measured.
+- **Download stalls or fails while another continues**: the failed artifact shows its error, and the setup outcome notifies once when the build ends.
+- **Setup retries after a failure**: a failed episode notifies once; a later successful attempt adds one ready notification, not a duplicate failure.
+- **Quick restart**: a restart that downloads nothing shows live activity only and adds no persistent notification.
+- **Agent deleted or access revoked during setup**: the live item and the activity indicator disappear, and no outcome remains if the agent is gone.
+- **Create build fails**: the create screen reports it; an agent that never existed leaves no notification behind.
+- **Setup finishes while filtered to Read**: a ready or failed outcome is unread, so it does not appear in the Read list, while the badge and activity indicator still update.
+- **Setup finishes while the chat is open**: the detailed starting card is gone; the compact line explains the queue, then disappears when ready or becomes the actionable failure banner.
+- **Person caused the update**: setup activity and its outcome are still shown, like other notifications.
+- **Many setups at once**: the live section stays scannable and the notification list below it remains reachable.
 
 ## Requirements *(mandatory)*
 
@@ -172,8 +207,8 @@ A person on a phone opens the navigation drawer, finds Notifications above Setti
 
 **What becomes a notification**
 
-- **FR-008**: Notifications MUST cover the notable events the removed Home panel covered: an agent that cannot start, a completed task run, a completed dream cycle, a finished background job, an integration change and a batch of channel replies.
-- **FR-009**: Only completed or terminal outcomes MUST be notified. Work that is still running MUST NOT appear, and a single failing episode MUST NOT produce a new notification for every retry.
+- **FR-008**: Notifications MUST cover the notable events the removed Home panel covered: an agent that cannot start, a completed task run, a completed dream cycle, a finished background job, an integration change and a batch of channel replies. They MUST also cover an agent's setup outcome under the setup rules below.
+- **FR-009**: Only completed or terminal outcomes MUST be notified. Running tasks and jobs MUST NOT appear as notifications, and a single failing episode MUST NOT produce a new notification for every retry. A running agent setup is shown only as live setup activity under the setup rules, never as a read/unread notification.
 - **FR-010**: A task run MUST be notified when it ends answered, without a response or interrupted; a non-answered outcome MUST be marked as a failure.
 - **FR-011**: A background job MUST be notified when it is reported, cancelled, lost or undeliverable, naming the job kind and outcome.
 - **FR-012**: An integration change MUST name who acted and what changed, for creation, editing, enabling, disabling, deletion, unlinking and self-management grants.
@@ -182,47 +217,61 @@ A person on a phone opens the navigation drawer, finds Notifications above Setti
 - **FR-015**: Notification content MUST be derived from recorded facts alone. Producing, listing or opening a notification MUST NOT start an agent turn or a model call.
 - **FR-016**: Every notification MUST have a stable identity and a destination, so paging, read state and cross-tab updates agree and a notification is never duplicated by a refresh.
 
+**Setup and downloads**
+
+- **FR-017**: While any agent the person may see is starting or downloading, the notification panel MUST show a live setup section above the filter tabs, independent of the selected All, Unread or Read filter, with each setup's agent, current step and progress.
+- **FR-018**: For every running download the live section MUST show its kind (chat model, embedding, speech-to-text or text-to-speech), its label, bytes completed of total when known, percent when known and the source's status. An unknown total MUST use an indeterminate indicator rather than a fabricated percentage. Multiple downloads for one agent MUST be shown together, and simultaneous agents MUST each have their own entry.
+- **FR-019**: Live setup MUST NOT be a notification: it MUST NOT be read or unread, MUST NOT count toward the unread badge or filter counts, and MUST NOT be retained after it ends. While any visible agent is setting up, the navigation entry MUST show a separate activity indicator.
+- **FR-020**: When a setup of an existing agent that downloaded at least one artifact ends ready, one unread notification MUST state that the agent is ready and link to it. When a setup of an existing agent fails, one failure notification MUST name the failed step or artifact and the error, and link to the agent's configuration, whether or not it downloaded anything. A setup that ends ready without downloading anything MUST NOT create a persistent notification.
+- **FR-021**: A setup failure MUST be the same single notification as the agent start-failure category; the setup and start-failure paths MUST NOT each create one.
+- **FR-022**: Setup outcomes MUST follow the same per-person read state, visibility, paging and 30-day retention as every other notification.
+- **FR-023**: While the panel is open, setup step, download progress and ETA MUST update without a reload within 2 seconds; while it is closed, the activity indicator MUST appear and clear within 2 seconds of a setup starting or ending while the app is open.
+- **FR-024**: The agent's chat MUST no longer show the detailed starting/downloading card. It MUST keep a compact status line that the agent is starting, that messages wait in line and where to see progress, and it MUST keep the actionable failure banner with retry and open-config.
+- **FR-025**: Setup of an agent that is still being created MUST be visible only to the person creating it; if that agent is never created, no persistent outcome MUST remain.
+- **FR-026**: Live setup and setup outcomes MUST disappear when their agent is deleted or the person loses access, following the same visibility rules as every other notification.
+
 **Read state and filters**
 
-- **FR-017**: Every notification MUST be unread for each person who may see it when it is created.
-- **FR-018**: Read state MUST be per person and MUST persist across reloads, sessions, tabs and devices.
-- **FR-019**: Opening the notification list MUST NOT mark anything read. Selecting a notification's destination MUST mark that notification read.
-- **FR-020**: A person MUST be able to mark an individual notification read or unread, and to mark every unread notification they may see read in one action, including those not loaded on the current page.
-- **FR-021**: The list MUST offer All, Unread and Read filters with counts; every notification MUST belong to exactly one of Unread or Read, the default MUST be All, and a chosen filter MUST NOT be reset by an arriving notification or a read-state change.
-- **FR-022**: Marking read or unread and loading a new notification MUST update the list, filter counts and badge without a reload.
-- **FR-023**: Each filter MUST have a specific empty state; an empty Unread filter MUST be distinguishable from an empty Read filter and from having no notifications at all.
-- **FR-024**: Notification times MUST be shown in the person's local time zone in the same relative/absolute style as the rest of the interface, with same-time notifications kept in a stable order.
+- **FR-027**: Every notification MUST be unread for each person who may see it when it is created.
+- **FR-028**: Read state MUST be per person and MUST persist across reloads, sessions, tabs and devices.
+- **FR-029**: Opening the notification list MUST NOT mark anything read. Selecting a notification's destination MUST mark that notification read.
+- **FR-030**: A person MUST be able to mark an individual notification read or unread, and to mark every unread notification they may see read in one action, including those not loaded on the current page.
+- **FR-031**: The list MUST offer All, Unread and Read filters with counts; every notification MUST belong to exactly one of Unread or Read, the default MUST be All, and a chosen filter MUST NOT be reset by an arriving notification or a read-state change.
+- **FR-032**: Marking read or unread and loading a new notification MUST update the list, filter counts and badge without a reload.
+- **FR-033**: Each filter MUST have a specific empty state; an empty Unread filter MUST be distinguishable from an empty Read filter and from having no notifications at all.
+- **FR-034**: Notification times MUST be shown in the person's local time zone in the same relative/absolute style as the rest of the interface, with same-time notifications kept in a stable order.
 
 **Visibility, lifecycle and retention**
 
-- **FR-025**: The list and badge MUST include only notifications for agents the signed-in person may currently see.
-- **FR-026**: When a person's access to an agent is revoked, that agent's notifications MUST leave their list and count on the next refresh, and MUST NOT be returned by any route while the person lacks access.
-- **FR-027**: Deleting an agent MUST remove its notifications and every person's read state for them.
-- **FR-028**: Notifications MUST be retained for 30 days and then no longer listed or counted, so storage and attention stay bounded.
-- **FR-029**: The first time the feature is available, historical notable events MUST NOT appear as unread; only events after activation notify.
-- **FR-030**: Two people who may see the same agent MUST have independent read states for the same notification.
+- **FR-035**: The list and badge MUST include only notifications for agents the signed-in person may currently see.
+- **FR-036**: When a person's access to an agent is revoked, that agent's notifications MUST leave their list and count on the next refresh, and MUST NOT be returned by any route while the person lacks access.
+- **FR-037**: Deleting an agent MUST remove its notifications and every person's read state for them.
+- **FR-038**: Notifications MUST be retained for 30 days and then no longer listed or counted, so storage and attention stay bounded.
+- **FR-039**: The first time the feature is available, historical notable events MUST NOT appear as unread; only events after activation notify.
+- **FR-040**: Two people who may see the same agent MUST have independent read states for the same notification.
 
 **Home replacement**
 
-- **FR-031**: Home MUST NOT present the “Since you were away” panel at any viewport, and MUST use the space it occupied rather than leaving an empty column.
-- **FR-032**: Every category the removed panel covered MUST be reachable through Notifications; the removal MUST NOT make an event category disappear from the product.
-- **FR-033**: The notification list MUST be the single notification inbox for all agents; Home MUST NOT keep a second copy of the same feed.
+- **FR-041**: Home MUST NOT present the “Since you were away” panel at any viewport, and MUST use the space it occupied rather than leaving an empty column.
+- **FR-042**: Every category the removed panel covered MUST be reachable through Notifications; the removal MUST NOT make an event category disappear from the product.
+- **FR-043**: The notification list MUST be the single notification inbox for all agents; Home MUST NOT keep a second copy of the same feed.
 
 **Freshness, failure handling and accessibility**
 
-- **FR-034**: While the app is open, a new notification MUST update the badge within 30 seconds without a manual reload, and MUST appear at the top of an open list when the current filter matches.
-- **FR-035**: Read-state changes made in one tab or window MUST reach other open tabs and windows within 30 seconds without a reload.
-- **FR-036**: If notifications cannot be loaded, the list MUST show an error state with retry, keep the selected filter, and MUST NOT present an empty inbox or a false zero badge when the last successful load was not zero.
-- **FR-037**: The entry, badge, filters, rows and read actions MUST be keyboard operable, have meaningful accessible names, keep focus contained while the list is open, close on Escape and restore focus to the entry.
-- **FR-038**: Failure and unread state MUST be conveyed by text or icon in addition to colour.
-- **FR-039**: The notification list MUST remain usable on a phone viewport, including the same filters, read actions and destinations.
+- **FR-044**: While the app is open, a new notification MUST update the badge within 30 seconds without a manual reload, and MUST appear at the top of an open list when the current filter matches.
+- **FR-045**: Read-state changes made in one tab or window MUST reach other open tabs and windows within 30 seconds without a reload.
+- **FR-046**: If notifications cannot be loaded, the list MUST show an error state with retry, keep the selected filter, and MUST NOT present an empty inbox or a false zero badge when the last successful load was not zero.
+- **FR-047**: The entry, badge, filters, rows and read actions MUST be keyboard operable, have meaningful accessible names, keep focus contained while the list is open, close on Escape and restore focus to the entry.
+- **FR-048**: Failure and unread state MUST be conveyed by text or icon in addition to colour.
+- **FR-049**: The notification list MUST remain usable on a phone viewport, including the same filters, read actions and destinations.
 
 ### Key Entities *(include if data involved)*
 
-- **Notification**: a notable event presented to people. It has a stable identity, a category (agent start failure, task run, dream cycle, background job, integration change or channel replies), the agent it concerns, when it happened, a summary derived from recorded facts, a failure tone and a destination.
+- **Notification**: a notable event presented to people. It has a stable identity, a category (agent start failure, agent setup outcome, task run, dream cycle, background job, integration change or channel replies), the agent it concerns, when it happened, a summary derived from recorded facts, a failure tone and a destination.
 - **Read state**: one person's read/unread choice for one notification, with when it changed. It is private to that person and never changes another person's view.
 - **Notification category**: the kind of notable event, which determines the wording, failure tone and destination. It is not a filter in this release.
-- **Agent visibility**: the existing rule that decides which agents a person may see. It governs both the notifications and the unread count, and is evaluated whenever the list is read.
+- **Setup activity**: an agent's live build and downloads, shown above the notification list. It has the agent, a phase (starting, downloading), the current step, one or more downloads (kind, label, bytes completed, total, source status) and an optional ETA. It is not a notification, has no read state and is not retained.
+- **Agent visibility**: the existing rule that decides which agents a person may see. It governs the notifications, the live setup activity and the unread count, and is evaluated whenever the list is read.
 
 ## Success Criteria *(mandatory)*
 
@@ -234,30 +283,39 @@ A person on a phone opens the navigation drawer, finds Notifications above Setti
 - **SC-004**: A newly created notification changes the badge within 30 seconds while the app is open, with no manual reload.
 - **SC-005**: Switching between All, Unread and Read shows the correct set in under 1 second for 95% of loads, with no notification appearing in more than one state.
 - **SC-006**: “Mark all read” clears every unread notification the person may see and the badge in one action, 100% of the time.
-- **SC-007**: Zero notifications from agents a person may not see are listed or counted, and revocation removes them on the next refresh (within 30 seconds while the app is open).
-- **SC-008**: After an agent is deleted, zero notifications or read states for that agent remain.
-- **SC-009**: Each of the six notable event categories produces exactly one notification at the correct moment with a working destination, 100% of the time.
+- **SC-007**: Zero notifications or live setup entries from agents a person may not see are listed or counted, and revocation removes them on the next refresh (within 30 seconds while the app is open).
+- **SC-008**: After an agent is deleted, zero notifications, read states or live setup entries for that agent remain.
+- **SC-009**: Each of the six categories the old panel covered produces exactly one notification at the correct moment with a working destination, and every qualifying setup episode produces exactly one ready or failed outcome, 100% of the time.
 - **SC-010**: Home presents no “Since you were away” section, and 100% of the event categories it used to show are available through Notifications.
-- **SC-011**: Work that is still running produces zero notifications, and a single start-failure episode produces no duplicate notifications.
+- **SC-011**: Running tasks, jobs and setups produce zero notifications or unread counts (live setup is shown separately), and a single start-failure episode produces no duplicate notifications.
 - **SC-012**: No notification older than the 30-day retention period is listed or counted.
 - **SC-013**: One person's read choice never changes another person's state for the same notification, in 100% of checks.
 - **SC-014**: Every notification control is reachable and operable by keyboard and has a meaningful assistive-technology name in 100% of accessibility checks.
+- **SC-015**: While an agent is setting up, its live progress is visible in the notification panel within 2 seconds and updates at least every 2 seconds, 95% of the time; 100% of downloads show correct bytes and percent when known, or an indeterminate indicator when not.
+- **SC-016**: A quick restart that downloads nothing and ends ready produces zero persistent notifications, 100% of the time; a setup that downloaded at least one artifact and ends ready produces one unread ready notification, 100% of the time.
+- **SC-017**: The detailed starting/downloading card no longer appears in chat; in 100% of checks, a starting agent still explains that messages are queued and where to see progress, and a failed agent still offers retry and open-config.
+- **SC-018**: Setup of an agent still being created is visible only to its creator, and an agent that is never created leaves zero persistent outcomes.
 
 ## Assumptions
 
 - **In-app only**: notifications are shown inside the WebUI. Email, desktop push, sound, Discord/Telegram delivery and other external channels are out of scope.
-- **Global, not per-agent**: the inbox spans every agent the person may see. It is not a per-agent page and does not change with the agent selected in the navigation.
-- **Coverage means parity**: the six existing notable-event categories are the notification categories for this release. New categories (for example mentions, provider changes or memory changes) are not added.
-- **Completed work only**: the old panel could mention a background job “still running”; the inbox waits until the outcome is terminal. A running task or job is not a notification.
-- **Explicit read state**: opening the list does not mark anything read; selecting a notification does. Marking unread is supported so the Unread filter is reversible.
-- **Mark all is global to the inbox**: it applies to every unread notification the person may see, not only the loaded page or the current filter.
-- **Default filter**: All is the default. Unread and Read are one action away and show counts.
-- **Retention**: notifications and read states older than 30 days are removed. A person who has been away longer sees an empty or recent inbox rather than an unbounded backlog.
+- **Global, not per-agent**: the inbox and its live setup section span every agent the person may see. They are not a per-agent page and do not change with the agent selected in the navigation.
+- **Coverage means parity plus setup**: the six existing notable-event categories remain, and an agent's setup outcome is added. New categories beyond those (for example mentions, provider changes or memory changes) are not added.
+- **Completed work only**: the old panel could mention a background job “still running”; the inbox waits until the outcome is terminal. A running task or job is not a notification. An agent's running setup is the one thing shown while still in progress, and only in the separate live setup section with no read state.
+- **Setup means the agent build**: setup covers an agent's build and its chat-model, embedding, speech-to-text and text-to-speech downloads. Catalogue refreshes, skill installs, file downloads and memory exports are not notifications.
+- **Ready needs a download**: a setup that downloads at least one artifact produces a ready notification when it finishes; a quick restart or rebuild with no download shows live activity only. A failed setup of an existing agent always notifies once per episode, and that notification is shared with the start-failure category rather than duplicated.
+- **Live progress is ephemeral**: the live setup section is not a notification, has no read state, does not count toward the badge and is not retained. Only its ready or failed outcome is retained for 30 days.
+- **Chat keeps the essentials**: the detailed starting/downloading card moves to notifications. Chat keeps a compact line that the agent is starting and messages are queued, plus the actionable failure banner (retry now / open config). This is status for the screen where the person is blocked, not a second notification.
+- **Create builds are owner-only**: setup for an agent still being created is visible to the person creating it; if creation fails, the create screen reports it and no notification is left for an agent that never existed.
+- **Explicit read state**: opening the list does not mark anything read; selecting a notification does. Marking unread is supported so the Unread filter is reversible. Live setup has no read state at all.
+- **Mark all is global to the inbox**: it applies to every unread notification the person may see, not only the loaded page or the current filter. Live setup is unaffected.
+- **Default filter**: All is the default. Unread and Read are one action away and show counts; the live setup section sits above all three.
+- **Retention**: notifications, setup outcomes and read states older than 30 days are removed. A person who has been away longer sees an empty or recent inbox rather than an unbounded backlog.
 - **No unread backfill**: when the feature first ships, events already in the product's history are not turned into unread notifications. The badge begins at zero and grows from activation.
-- **Own actions included**: a notification is shown even when the person caused the change (for example an integration edit), matching the old panel, because it is also a record of what happened.
-- **Visibility follows existing access**: a person sees a notification if they can see its agent. The rule is checked on every read, not only when the notification is created. A person who gains access to an agent later sees that agent's retained notifications as unread unless they mark them read.
-- **Summary text is factual**: wording is built from stored event facts (task title, state, entry counts, who changed what). Notifications never contain model-written text and never reveal more than the destination page would.
+- **Own actions included**: a notification is shown even when the person caused the change (for example an integration edit or a model update), matching the old panel, because it is also a record of what happened.
+- **Visibility follows existing access**: a person sees a notification or live setup item if they can see its agent. The rule is checked on every read, not only when the item is created. A person who gains access to an agent later sees that agent's retained notifications as unread unless they mark them read.
+- **Summary text is factual**: wording is built from stored event facts (task title, state, entry counts, who changed what) and setup progress from the source's own labels. Notifications never contain model-written text and never reveal more than the destination page would.
 - **Previous-visit window retired for this surface**: the notification list is not bounded by the person's previous visit. Any last-visit tracking that remains is not used to hide notifications.
-- **Desktop and phone**: the entry lives in the navigation sidebar and, on a phone, in the same sidebar shown in the navigation drawer. A separate top-bar notification control is not part of this release.
-- **No notification preferences**: per-category or per-agent muting, grouping, search and bulk selection are out of scope. Every eligible event notifies every person who may see it.
-- **Dependencies**: the existing notable-event sources (agent health, task runs, dream cycles, background jobs, integration changes and channel reply activity), the existing agent-visibility and permission rules, and the app's design system for the navigation entry, badge, list and icons.
+- **Desktop and phone**: the entry lives in the navigation sidebar and, on a phone, in the same sidebar shown in the navigation drawer. A separate top-bar notification control is not part of this release. The live setup section is shown in the panel at both sizes.
+- **No notification preferences**: per-category or per-agent muting, grouping, search, per-download notifications and bulk selection are out of scope. Every eligible event notifies every person who may see it.
+- **Dependencies**: the existing notable-event sources (agent health, task runs, dream cycles, background jobs, integration changes and channel reply activity), the existing setup progress source and its download sources (agent build, chat-model pull, embedding, speech-to-text and text-to-speech), the existing agent-visibility and permission rules, and the app's design system for the navigation entry, badge, live setup, list and icons.
