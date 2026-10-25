@@ -7,6 +7,8 @@ on:
     branches: [master]
     paths:
       - 'docs/**'
+      - 'design'
+      - '.gitmodules'
       - 'docs-redirect/**'
       - '.github/workflows/deploy-landing.yml'
   workflow_dispatch:
