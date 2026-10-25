@@ -1307,6 +1307,15 @@ pub async fn handle_request(
             let injected_context = (!memory.is_empty()).then_some(memory.len());
             let turn_start = Utc::now();
             let skills = agent.recommend_skills(&prompt).await.unwrap_or_default();
+            // A WebUI reply is news for the person whose conversation it is. A woken
+            // background report already has its own job notification, so it is left out.
+            let notifies_chat = matches!(session.1, VizierChannelId::HTTP(..))
+                && matches!(
+                    &request.content,
+                    VizierRequestContent::Chat(_)
+                        | VizierRequestContent::AudioChat(..)
+                        | VizierRequestContent::ClientEvent(_)
+                );
             let res = agent
                 .chat(
                     request,
@@ -1325,6 +1334,18 @@ pub async fn handle_request(
             if let Some(injected) = injected_context {
                 let agent = session.0.clone();
                 record_context_followup(&storage, &session, &agent, turn_start, injected).await;
+            }
+            if notifies_chat
+                && matches!(
+                    res.content,
+                    VizierResponseContent::Message { .. }
+                        | VizierResponseContent::AudioReply(..)
+                )
+                && let Some(uid) = &res.history_uid
+            {
+                deps.notifications
+                    .chat_replied(&session, uid, res.timestamp)
+                    .await;
             }
             if let Some(ref tx) = response_tx {
                 let _ = tx.send_async(res).await;

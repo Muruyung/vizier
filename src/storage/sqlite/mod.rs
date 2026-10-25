@@ -405,10 +405,11 @@ pub fn init_notification_schema(conn: &Connection) -> Result<()> {
     conn.execute_batch(
         "
         CREATE TABLE IF NOT EXISTS notification (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            event_key   TEXT NOT NULL UNIQUE,
-            agent_id    TEXT NOT NULL,
-            category    TEXT NOT NULL,
+            id               INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_key        TEXT NOT NULL UNIQUE,
+            agent_id         TEXT NOT NULL,
+            audience_user_id TEXT,
+            category         TEXT NOT NULL,
             tone        TEXT NOT NULL,
             summary     TEXT NOT NULL,
             href        TEXT NOT NULL,
@@ -429,6 +430,9 @@ pub fn init_notification_schema(conn: &Connection) -> Result<()> {
         );
         ",
     )?;
+    // Spec 029 grew a per-person audience after the table first shipped on a dev branch:
+    // a WebUI chat reply belongs to one person. Everyone else keeps the default (NULL).
+    add_column_if_missing(conn, "notification", "audience_user_id", "TEXT")?;
     Ok(())
 }
 

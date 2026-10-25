@@ -297,6 +297,7 @@ mod tests {
             .insert_notifications(&[NotificationDraft {
                 event_key: key.into(),
                 agent_id: agent_id.into(),
+                audience_user_id: None,
                 category: NotificationCategory::TaskRun,
                 tone: NotificationTone::Default,
                 summary: format!("Notification {key}"),

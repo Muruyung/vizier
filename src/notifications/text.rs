@@ -108,6 +108,11 @@ pub fn channel_replies(channel: &str, replies: u64) -> String {
     }
 }
 
+/// A WebUI conversation's reply, for the person whose conversation it is.
+pub fn chat_replied() -> &'static str {
+    "Replied in your conversation."
+}
+
 pub fn agent_ready(name: &str) -> String {
     format!("{name} is ready.")
 }

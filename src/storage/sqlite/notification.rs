@@ -68,11 +68,12 @@ impl NotificationStorage for SqliteStorage {
             }
             inserted += tx.execute(
                 "INSERT OR IGNORE INTO notification
-                    (event_key, agent_id, category, tone, summary, href, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+                    (event_key, agent_id, audience_user_id, category, tone, summary, href, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 rusqlite::params![
                     draft.event_key.as_str(),
                     draft.agent_id.as_str(),
+                    draft.audience_user_id.as_deref(),
                     draft.category.as_str(),
                     draft.tone.as_str(),
                     draft.summary.as_str(),
@@ -102,7 +103,8 @@ impl NotificationStorage for SqliteStorage {
              FROM notification n \
              LEFT JOIN notification_read r \
                ON r.notification_id = n.id AND r.user_id = ? \
-             WHERE n.agent_id IN ({}) AND n.created_at >= ?",
+             WHERE n.agent_id IN ({}) AND n.created_at >= ? \
+               AND (n.audience_user_id IS NULL OR n.audience_user_id = ?)",
             marks(agents),
         );
         match filter {
@@ -113,6 +115,7 @@ impl NotificationStorage for SqliteStorage {
         let mut params: Vec<Box<dyn ToSql>> = vec![Box::new(user_id.to_string())];
         params.extend(agents.iter().map(|a| Box::new(a.clone()) as Box<dyn ToSql>));
         params.push(Box::new(cutoff()));
+        params.push(Box::new(user_id.to_string()));
         if let Some((at, id)) = before {
             sql.push_str(" AND (n.created_at < ? OR (n.created_at = ? AND n.id < ?))");
             params.push(Box::new(at.timestamp_millis()));
@@ -172,12 +175,14 @@ impl NotificationStorage for SqliteStorage {
              FROM notification n \
              LEFT JOIN notification_read r \
                ON r.notification_id = n.id AND r.user_id = ? \
-             WHERE n.agent_id IN ({}) AND n.created_at >= ?",
+             WHERE n.agent_id IN ({}) AND n.created_at >= ? \
+               AND (n.audience_user_id IS NULL OR n.audience_user_id = ?)",
             marks(agents),
         );
         let mut params: Vec<Box<dyn ToSql>> = vec![Box::new(user_id.to_string())];
         params.extend(agents.iter().map(|a| Box::new(a.clone()) as Box<dyn ToSql>));
         params.push(Box::new(cutoff()));
+        params.push(Box::new(user_id.to_string()));
         let conn = self.conn.lock();
         let (all, unread): (i64, i64) = conn.query_row(
             &sql,
@@ -207,12 +212,14 @@ impl NotificationStorage for SqliteStorage {
         let conn = self.conn.lock();
         let sql = format!(
             "SELECT 1 FROM notification \
-             WHERE id = ? AND agent_id IN ({}) AND created_at >= ?",
+             WHERE id = ? AND agent_id IN ({}) AND created_at >= ? \
+               AND (audience_user_id IS NULL OR audience_user_id = ?)",
             marks(agents)
         );
         let mut params: Vec<Box<dyn ToSql>> = vec![Box::new(notification_id)];
         params.extend(agents.iter().map(|a| Box::new(a.clone()) as Box<dyn ToSql>));
         params.push(Box::new(cutoff()));
+        params.push(Box::new(user_id.to_string()));
         let visible: Option<i64> = conn
             .query_row(&sql, rusqlite::params_from_iter(params.iter()), |row| {
                 row.get(0)
@@ -249,7 +256,8 @@ impl NotificationStorage for SqliteStorage {
         let sql = format!(
             "INSERT OR IGNORE INTO notification_read (user_id, notification_id, read_at) \
              SELECT ?, n.id, ? FROM notification n \
-             WHERE n.agent_id IN ({}) AND n.created_at >= ?",
+             WHERE n.agent_id IN ({}) AND n.created_at >= ? \
+               AND (n.audience_user_id IS NULL OR n.audience_user_id = ?)",
             marks(agents)
         );
         let mut params: Vec<Box<dyn ToSql>> = vec![
@@ -258,6 +266,7 @@ impl NotificationStorage for SqliteStorage {
         ];
         params.extend(agents.iter().map(|a| Box::new(a.clone()) as Box<dyn ToSql>));
         params.push(Box::new(cutoff()));
+        params.push(Box::new(user_id.to_string()));
         let conn = self.conn.lock();
         let inserted = conn.execute(&sql, rusqlite::params_from_iter(params.iter()))?;
         Ok(inserted as u64)
@@ -355,6 +364,7 @@ mod tests {
         NotificationDraft {
             event_key: key.into(),
             agent_id: agent_id.into(),
+            audience_user_id: None,
             category: NotificationCategory::TaskRun,
             tone: NotificationTone::Default,
             summary: format!("Task “{key}” answered."),
@@ -365,6 +375,34 @@ mod tests {
 
     fn ids(items: &[NotificationItem]) -> Vec<i64> {
         items.iter().map(|i| i.id).collect()
+    }
+
+    #[test]
+    fn the_schema_adds_the_audience_to_a_table_created_before_it() {
+        let conn = Connection::open_in_memory().unwrap();
+        // The notification table as the first 029 build created it.
+        conn.execute_batch(
+            "CREATE TABLE notification (
+                id          INTEGER PRIMARY KEY AUTOINCREMENT,
+                event_key   TEXT NOT NULL UNIQUE,
+                agent_id    TEXT NOT NULL,
+                category    TEXT NOT NULL,
+                tone        TEXT NOT NULL,
+                summary     TEXT NOT NULL,
+                href        TEXT NOT NULL,
+                created_at  INTEGER NOT NULL
+            );",
+        )
+        .unwrap();
+        crate::storage::sqlite::init_notification_schema(&conn).unwrap();
+        let has = conn
+            .prepare("PRAGMA table_info(notification)")
+            .unwrap()
+            .query_map([], |row| row.get::<_, String>(1))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .any(|name| name == "audience_user_id");
+        assert!(has, "the audience column is added to an existing table");
     }
 
     #[tokio::test]
@@ -598,6 +636,57 @@ mod tests {
                 .unwrap(),
             0,
             "the read row cascaded"
+        );
+    }
+
+    #[tokio::test]
+    async fn an_addressed_row_is_listed_counted_and_read_only_by_its_person() {
+        let (s, _d) = setup();
+        agent(&s, "a");
+        let at = Utc::now();
+        let mut addressed = draft("chat:1", "a", at);
+        addressed.audience_user_id = Some("ana".into());
+        addressed.category = NotificationCategory::ChatReply;
+        s.insert_notifications(&[draft("shared", "a", at), addressed])
+            .await
+            .unwrap();
+
+        let mine = s
+            .list_notifications("ana", &["a".into()], NotificationFilter::All, None, 10)
+            .await
+            .unwrap();
+        assert_eq!(mine.len(), 2);
+        let chat = mine.iter().find(|i| i.category == NotificationCategory::ChatReply).unwrap();
+        let theirs = s
+            .list_notifications("bob", &["a".into()], NotificationFilter::All, None, 10)
+            .await
+            .unwrap();
+        assert_eq!(theirs.len(), 1, "bob does not see ana's conversation");
+        assert_eq!(s.notification_counts("ana", &["a".into()]).await.unwrap().all, 2);
+        assert_eq!(s.notification_counts("bob", &["a".into()]).await.unwrap().all, 1);
+
+        // Another person cannot even tell the addressed row exists.
+        assert!(
+            !s.set_notification_read("bob", chat.id, true, Utc::now(), &["a".into()])
+                .await
+                .unwrap()
+        );
+        assert!(
+            s.set_notification_read("ana", chat.id, true, Utc::now(), &["a".into()])
+                .await
+                .unwrap()
+        );
+
+        // Mark-all covers each person's own visible set only: bob reads the shared row,
+        // ana read only her conversation, so the shared row is still unread for her.
+        s.mark_all_notifications_read("bob", Utc::now(), &["a".into()])
+            .await
+            .unwrap();
+        let counts = s.notification_counts("ana", &["a".into()]).await.unwrap();
+        assert_eq!((counts.unread, counts.read), (1, 1));
+        assert_eq!(
+            s.notification_counts("bob", &["a".into()]).await.unwrap().unread,
+            0
         );
     }
 

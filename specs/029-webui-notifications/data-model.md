@@ -13,6 +13,7 @@ A notable event, stored at the moment it completes. The row is independent of th
 | `id` | `i64` | `INTEGER PRIMARY KEY AUTOINCREMENT`. Public id, stable for cursors and read marks. Never reused. |
 | `event_key` | `String` | Required, non-empty, `UNIQUE`. The exactly-once guard (`task_run:812`, `job:…`, `reply:…`). Not exposed by the API. |
 | `agent_id` | `String` | The agent the event concerns. Must exist when the row is inserted; deletion of the agent deletes the row. |
+| `audience_user_id` | `String?` | When set, only this person sees the row. Used by `chat_reply`, whose conversation belongs to one person; every other category is `NULL` (everyone who can see the agent). |
 | `category` | `NotificationCategory` | `agent_start_failure`, `agent_setup_ready`, `task_run`, `dream_cycle`, `background_job`, `integration`, `channel_replies`. Stored as its snake-case string. |
 | `tone` | `NotificationTone` | `default`, `failed` or `success`. `failed` is used for non-answered task runs, undelivered/lost jobs and start failures; `success` only for a downloaded setup that became ready. |
 | `summary` | `String` | The one-sentence row text, built from stored facts at creation. Never model output; never a secret, provider key or integration setting value. |
@@ -38,6 +39,9 @@ Rules:
 | `background_job` | A job reaches a terminal state | `Background batch reported back.` / `Delegation was cancelled ({reason}).` / `… finished, but its report could not be delivered.` / `… was lost when vizier restarted.` | `default` for reported/cancelled; `failed` for undelivered/lost | `/{agent}/chat` |
 | `integration` | An integration or grant write commits | `{who} added/changed/switched on/switched off/deleted/unlinked {name}.` / `{who} let the agent manage its own {name} integrations.` / `… stopped …` | `default` | `/{agent}/integrations/{channels|addons|mcp}` |
 | `channel_replies` | A closed hourly conversation batch is projected | `Replied once in a Discord conversation.` / `Replied {n} times in a Telegram conversation.` | `default` | `/{agent}/chat?channel={channel}` |
+| `chat_reply` | A WebUI turn produces a reply | `Replied in your conversation.` | `default` | `/{agent}/chat/{topic}` |
+
+`chat_reply` is the one category with an `audience_user_id` (the person whose conversation it is, resolved from the session's `HTTP(username, …)` channel); Discord/Telegram turns never create it, because `channel_replies` already covers them.
 
 Pluralization, quotes, the actor-name fallback and the family→page mapping live in `src/notifications/text.rs`; one test per branch.
 
@@ -68,7 +72,7 @@ Rules:
 |---|---|---|
 | `NotificationFilter` | `all`, `unread`, `read` | Query value; default `all`. |
 | `NotificationTone` | `default`, `failed`, `success` | Serialized snake_case. |
-| `NotificationCategory` | seven values above | Serialized snake_case; exposed for semantics/tests, not offered as a filter. |
+| `NotificationCategory` | eight values above | Serialized snake_case; exposed for semantics/tests, not offered as a filter. |
 
 ### `NotificationItem` (API)
 
@@ -77,7 +81,7 @@ Rules:
 | `id` | `i64` | Public id. |
 | `at` | RFC 3339 string | `created_at`. |
 | `agent_id` | `String` | The client resolves the agent name from its agent store; it falls back to the id if the agent is not loaded. |
-| `category` | string | One of the seven. |
+| `category` | string | One of the eight. |
 | `tone` | string | `default`, `failed` or `success`. |
 | `text` | `String` | The stored `summary`. |
 | `href` | `String` | The destination. |
@@ -185,7 +189,7 @@ Live setup is a projection of `GET /api/v1/utils/setup-state`, not a notificatio
 
 - `visible_agents(user)` is the existing rule used by Home: ownership, sharing and permissions. It is resolved in the HTTP handler before every list/count/read/read-all.
 - Storage methods take `agents: &[String]` and return only rows whose `agent_id` is in it. An empty whitelist returns empty items and zero counts.
-- Setting read on a notification outside the whitelist returns “not found” (404); the API never reveals that the row exists.
+- Setting read on a notification outside the whitelist — or outside the caller's audience, for a `chat_reply` — returns “not found” (404); the API never reveals that the row exists.
 - The setup endpoint already applies the same visibility rule (including `owner_id` for a create build). No notification uses `owner_id`; it is live only.
 - Agent deletion is checked in the service before insert, so a race cannot leave a new row after the delete transaction.
 
@@ -201,6 +205,7 @@ LEFT JOIN notification_read r
   ON r.notification_id = n.id AND r.user_id = ?user
 WHERE n.agent_id IN (…visible…)
   AND n.created_at >= ?cutoff
+  AND (n.audience_user_id IS NULL OR n.audience_user_id = ?user)
   AND (?filter = 'all' OR (?filter = 'unread' AND r.notification_id IS NULL)
                         OR (?filter = 'read'   AND r.notification_id IS NOT NULL))
   AND (?cursor IS NULL OR (n.created_at, n.id) < (?cursor_at, ?cursor_id))
@@ -217,7 +222,8 @@ SELECT COUNT(*) AS all,
 FROM notification n
 LEFT JOIN notification_read r
   ON r.notification_id = n.id AND r.user_id = ?user
-WHERE n.agent_id IN (…visible…) AND n.created_at >= ?cutoff;
+WHERE n.agent_id IN (…visible…) AND n.created_at >= ?cutoff
+  AND (n.audience_user_id IS NULL OR n.audience_user_id = ?user);
 ```
 
 ### Mark all
@@ -226,12 +232,13 @@ WHERE n.agent_id IN (…visible…) AND n.created_at >= ?cutoff;
 INSERT OR IGNORE INTO notification_read (user_id, notification_id, read_at)
 SELECT ?user, n.id, ?now
 FROM notification n
-WHERE n.agent_id IN (…visible…) AND n.created_at >= ?cutoff;
+WHERE n.agent_id IN (…visible…) AND n.created_at >= ?cutoff
+  AND (n.audience_user_id IS NULL OR n.audience_user_id = ?user);
 ```
 
 ### Mark one
 
-- Verify the notification's `agent_id` is visible.
+- Verify the notification's `agent_id` is visible and its `audience_user_id` is null or the caller.
 - Read: `INSERT INTO notification_read … ON CONFLICT(user_id, notification_id) DO UPDATE SET read_at = excluded.read_at`.
 - Unread: `DELETE FROM notification_read WHERE user_id = ? AND notification_id = ?`.
 - Return whether a visible row was found.

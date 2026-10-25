@@ -7,10 +7,10 @@ All routes are under `/api/v1`, require a signed-in person, and are global acros
 ## Visibility and access
 
 - Every handler resolves `visible_agents(user)` before touching notifications (the same rule Home uses: ownership, sharing, permissions).
-- A notification is returned only when its `agent_id` is in that set.
+- A notification is returned only when its `agent_id` is in that set. A `chat_reply` is additionally returned only to the person whose conversation it is (its `audience_user_id`); everyone else sees it nowhere, including counts and per-id reads.
 - There is no per-user notification row; read state is per person.
 - A read/read-all request never touches another person's read state or another agent's rows.
-- A missing or invisible notification id on a per-id route is `404` (it does not reveal that the id exists).
+- A missing, invisible or other-audience notification id on a per-id route is `404` (it does not reveal that the id exists).
 - Notifications older than 30 days are never returned or counted.
 
 ## `GET /api/v1/notifications`
@@ -90,7 +90,7 @@ Marks one visible notification read or unread.
 - `read` is required and must be a boolean; a missing/!boolean body is `400`.
 - `true` inserts/updates this person's read row; `false` deletes it.
 - Idempotent: repeating either request returns the same counts.
-- `404` when the id is missing, deleted, outside retention, or its agent is not visible.
+- `404` when the id is missing, deleted, outside retention, its agent is not visible, or it is another person's `chat_reply`.
 - The response counts let the client update the badge and filters without a second request.
 
 ## `POST /api/v1/notifications/read-all`

@@ -14,6 +14,7 @@ Every notification is created after the source's transition is durable. The one 
 | Integration event | `integrations::service` write committed | `integration:{integration_id}:{action}:{at_ms}:{ordinal}:{agent_id}` | `default` | `/{agent}/integrations/{channels\|addons\|mcp}` |
 | Integration grant | `set_grant` changed | `grant:{agent_id}:{family}:{on\|off}:{at_ms}` | `default` | `/{agent}/integrations/{family}` |
 | Channel replies | Closed-hour projection | `reply:{agent_id}:{channel}:{hour}` | `default` | `/{agent}/chat?channel={channel}` |
+| WebUI chat reply | A WebUI turn produced a reply and was saved | `chat:{history_uid}` | `default` | `/{agent}/chat/{topic}` |
 | Agent setup ready | Supervisor starts a build that downloaded ≥ 1 artifact | `setup_ready:{agent_id}:{build_id}` | `success` | `/{agent}/chat` |
 | Agent start failure | Supervisor enters a new failure episode | `start_failed:{agent_id}:{episode_id}` | `failed` | `/{agent}/config` |
 
@@ -79,6 +80,16 @@ All rows carry the agent id; the row title in the UI is the agent's display name
 - **Current hour**: not projected until it closes. A batch that closes after activation appears on the next list/count poll (within 15 s while the app is open, plus the hour boundary).
 - **30-day cap**: a long downtime catches up only the retained window.
 
+## WebUI chat replies
+
+- **When**: the `Chat`/`AudioChat`/`ClientEvent` arm of `agents/process.rs` gets a saved `Message` or `AudioReply` back from `VizierAgent::chat`, and the session's channel is `VizierChannelId::HTTP` (the WebUI uses `vizier-webui`).
+- **Audience**: the person whose conversation it is. The session's channel carries their username, which the service resolves through `UserStorage::get_user` to the id read state uses. The row is invisible to every other viewer of the agent (list, counts, read, mark-all).
+- **Text**: `Replied in your conversation.` Never the topic title or the model's text.
+- **Tone**: `default`. `Abort`/`Empty` and failed turns produce no row; the conversation itself shows the failure.
+- **Href**: `/{agent}/chat/{topic}` (or the agent's chat when the session has no topic).
+- **Not**: Discord/Telegram turns (their hourly `channel_replies` aggregate covers them), or a woken `BackgroundReport` turn (its `background_job` row already exists). A resumed-after-restart turn notifies like any other.
+- **Notification is immediate**: it does not wait for the person to leave the conversation; read state marks nothing on open.
+
 ## Agent setup ready
 
 - **When**: the supervisor has a built agent and either `setup_downloaded = true` or it is recovering from a failure episode (`failures > 0`), after it records `Running` (this includes a `prebuilt` update and a create build once persisted).
@@ -104,4 +115,5 @@ All rows carry the agent id; the row title in the UI is the agent's display name
 - **No model call**: none of the wording or projection asks a model or starts a turn.
 - **No content leak**: summaries use stored facts (task title/state, journal count, job kind/state/reason, integration name/action/actor, channel/count). No secrets, settings values, message bodies or model text.
 - **No setup progress writes**: live setup stays in `SetupBoard` and `/utils/setup-state`; only ready/failure outcomes become rows.
+- **Audience**: only `chat_reply` rows are addressed to one person; every other creation leaves `audience_user_id` empty and relies on agent visibility.
 - **Ordering**: `(created_at, id)`; the event time is the transition time (the reply bucket's last reply for channel replies).

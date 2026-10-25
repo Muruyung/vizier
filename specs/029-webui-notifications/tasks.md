@@ -394,6 +394,8 @@ After Phase 2:
 
 ## Run status
 
+**Extension (after the first pass):** a completed WebUI conversation reply became the `chat_reply` category, addressed to the person whose conversation it is (`notification.audience_user_id`, checked in every read). T007's "seven values" became eight; see FR-050, `data-model.md` §1–2 and `contracts/notification-sources.md` "WebUI chat replies".
+
 **Design amendment (after the first pass):** the bell moved from the sidebar footer to the right end of every page header, so the entry and the right-hand panel share an edge. T002/T003 (NavItem/Sidebar count and busy) were superseded by `IconButton` count/busy and `NotificationsBell` mounted by `PageFrame`/`SettingsFrame`, Home, the chat header and the phone top bar; T020's sidebar wiring became the header wiring. `spec.md`, `plan.md` and `contracts/notifications-ui.md` describe the header bell.
 
 Everything is implemented and committed except the two checks that need dependencies this environment does not have. Both are recorded in `quickstart.md`'s "Recorded run":

@@ -20,6 +20,9 @@ pub enum NotificationCategory {
     BackgroundJob,
     Integration,
     ChannelReplies,
+    /// A WebUI conversation's reply. Addressed to the person whose conversation it is
+    /// (`audience_user_id`), not to everyone who can see the agent.
+    ChatReply,
 }
 
 impl NotificationCategory {
@@ -32,6 +35,7 @@ impl NotificationCategory {
             Self::BackgroundJob => "background_job",
             Self::Integration => "integration",
             Self::ChannelReplies => "channel_replies",
+            Self::ChatReply => "chat_reply",
         }
     }
 
@@ -44,6 +48,7 @@ impl NotificationCategory {
             "background_job" => Some(Self::BackgroundJob),
             "integration" => Some(Self::Integration),
             "channel_replies" => Some(Self::ChannelReplies),
+            "chat_reply" => Some(Self::ChatReply),
             _ => None,
         }
     }
@@ -119,6 +124,10 @@ pub struct NotificationDraft {
     /// The exactly-once guard: one row per event, forever.
     pub event_key: String,
     pub agent_id: String,
+    /// When set, only this person sees the row. Used by WebUI chat replies, whose
+    /// conversation belongs to one person; every other category is visible to everyone who
+    /// can see the agent (the default, `None`).
+    pub audience_user_id: Option<String>,
     pub category: NotificationCategory,
     pub tone: NotificationTone,
     /// Plain text, built from stored facts. Never model output or a setting value.
@@ -188,6 +197,7 @@ mod tests {
             NotificationCategory::BackgroundJob,
             NotificationCategory::Integration,
             NotificationCategory::ChannelReplies,
+            NotificationCategory::ChatReply,
         ] {
             assert_eq!(
                 NotificationCategory::parse(category.as_str()),

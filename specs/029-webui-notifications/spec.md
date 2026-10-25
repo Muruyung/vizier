@@ -41,6 +41,7 @@ A person is working on an agent's tasks page when a scheduled task fails and a b
 5. **Given** the phone layout (a narrow window), **When** the person views the top bar, **Then** the bell is still present with an accessible name, a visible unread indicator and the same behaviour as on a wide screen.
 6. **Given** a notification row, **When** the person selects it, **Then** its destination opens and that notification becomes read.
 7. **Given** the notification list is open, **When** the person closes it, **Then** they are back where they were, with keyboard focus returned to the Notifications entry.
+8. **Given** a person sends a message in a WebUI conversation and leaves that screen, **When** the agent answers, **Then** one notification appears for that person (and not for anyone else who can see the agent) and opens that conversation.
 
 ---
 
@@ -188,6 +189,7 @@ A person on a phone finds the bell in the top bar and gets the same list full-sc
 - **Create build fails**: the create screen reports it; an agent that never existed leaves no notification behind.
 - **Setup finishes while filtered to Read**: a ready or failed outcome is unread, so it does not appear in the Read list, while the badge and activity indicator still update.
 - **Setup finishes while the chat is open**: the detailed starting card is gone; the compact line explains the queue, then disappears when ready or becomes the actionable failure banner.
+- **Two people share an agent**: one has a WebUI conversation; the other sees its notification nowhere in list, counts or read actions.
 - **Person caused the update**: setup activity and its outcome are still shown, like other notifications.
 - **Many setups at once**: the live section stays scannable and the notification list below it remains reachable.
 
@@ -207,7 +209,7 @@ A person on a phone finds the bell in the top bar and gets the same list full-sc
 
 **What becomes a notification**
 
-- **FR-008**: Notifications MUST cover the notable events the removed Home panel covered: an agent that cannot start, a completed task run, a completed dream cycle, a finished background job, an integration change and a batch of channel replies. They MUST also cover an agent's setup outcome under the setup rules below.
+- **FR-008**: Notifications MUST cover the notable events the removed Home panel covered: an agent that cannot start, a completed task run, a completed dream cycle, a finished background job, an integration change and a batch of channel replies. They MUST also cover an agent's setup outcome under the setup rules below, and a completed WebUI conversation reply under FR-050.
 - **FR-009**: Only completed or terminal outcomes MUST be notified. Running tasks and jobs MUST NOT appear as notifications, and a single failing episode MUST NOT produce a new notification for every retry. A running agent setup is shown only as live setup activity under the setup rules, never as a read/unread notification.
 - **FR-010**: A task run MUST be notified when it ends answered, without a response or interrupted; a non-answered outcome MUST be marked as a failure.
 - **FR-011**: A background job MUST be notified when it is reported, cancelled, lost or undeliverable, naming the job kind and outcome.
@@ -265,9 +267,13 @@ A person on a phone finds the bell in the top bar and gets the same list full-sc
 - **FR-048**: Failure and unread state MUST be conveyed by text or icon in addition to colour.
 - **FR-049**: The notification list MUST remain usable on a phone viewport, including the same filters, read actions and destinations.
 
+**WebUI conversations**
+
+- **FR-050**: A completed WebUI conversation reply MUST become a notification addressed to the person whose conversation it is. It MUST NOT be listed, counted or readable by anyone else who can see the agent. Discord and Telegram replies keep the hourly channel-reply aggregate and MUST NOT also produce a per-turn row.
+
 ### Key Entities *(include if data involved)*
 
-- **Notification**: a notable event presented to people. It has a stable identity, a category (agent start failure, agent setup outcome, task run, dream cycle, background job, integration change or channel replies), the agent it concerns, when it happened, a summary derived from recorded facts, a failure tone and a destination.
+- **Notification**: a notable event presented to people. It has a stable identity, a category (agent start failure, agent setup outcome, task run, dream cycle, background job, integration change, channel replies or a WebUI chat reply), the agent it concerns, when it happened, a summary derived from recorded facts, a failure tone and a destination. Every category is visible to everyone who can see the agent except a WebUI chat reply, which is addressed to the one person whose conversation it is.
 - **Read state**: one person's read/unread choice for one notification, with when it changed. It is private to that person and never changes another person's view.
 - **Notification category**: the kind of notable event, which determines the wording, failure tone and destination. It is not a filter in this release.
 - **Setup activity**: an agent's live build and downloads, shown above the notification list. It has the agent, a phase (starting, downloading), the current step, one or more downloads (kind, label, bytes completed, total, source status) and an optional ETA. It is not a notification, has no read state and is not retained.
@@ -317,6 +323,7 @@ A person on a phone finds the bell in the top bar and gets the same list full-sc
 - **Visibility follows existing access**: a person sees a notification or live setup item if they can see its agent. The rule is checked on every read, not only when the item is created. A person who gains access to an agent later sees that agent's retained notifications as unread unless they mark them read.
 - **Summary text is factual**: wording is built from stored event facts (task title, state, entry counts, who changed what) and setup progress from the source's own labels. Notifications never contain model-written text and never reveal more than the destination page would.
 - **Previous-visit window retired for this surface**: the notification list is not bounded by the person's previous visit. Any last-visit tracking that remains is not used to hide notifications.
+- **Chat replies belong to one person**: a WebUI conversation is a person's own, so its notification carries that person as its audience and is invisible to other viewers of the same agent; Discord and Telegram stay agent-wide through the hourly channel reply summary. A reply is notified whether or not the person is still on the conversation screen.
 - **Desktop and phone**: the bell lives at the right end of the page header on desktop, and in the phone top bar where the header below `lg` does not repeat it. The navigation sidebar and its drawer hold navigation only. The live setup section is shown in the panel at both sizes.
 - **No notification preferences**: per-category or per-agent muting, grouping, search, per-download notifications and bulk selection are out of scope. Every eligible event notifies every person who may see it.
 - **Dependencies**: the existing notable-event sources (agent health, task runs, dream cycles, background jobs, integration changes and channel reply activity), the existing setup progress source and its download sources (agent build, chat-model pull, embedding, speech-to-text and text-to-speech), the existing agent-visibility and permission rules, and the app's design system for the navigation entry, badge, live setup, list and icons.

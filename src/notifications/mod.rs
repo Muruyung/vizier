@@ -18,7 +18,8 @@ use chrono::{DateTime, Utc};
 use crate::{
     schema::{
         EventAction, IntegrationFamily, JobKind, JobState, NotificationCategory,
-        NotificationDraft, NotificationTone, Requester, TaskRunState,
+        NotificationDraft, NotificationTone, Requester, TaskRunState, VizierChannelId,
+        VizierSession,
     },
     storage::{
         VizierStorage,
@@ -224,6 +225,40 @@ impl Notifications {
         .await;
     }
 
+    /// A WebUI conversation's reply, addressed to the person whose conversation it is: the
+    /// session's channel carries their username, which resolves to the id read state uses.
+    /// Discord/Telegram keep the hourly `channel_replies` aggregate instead.
+    pub async fn chat_replied(&self, session: &VizierSession, history_uid: &str, at: DateTime<Utc>) {
+        let VizierChannelId::HTTP(username, _) = &session.1 else {
+            return;
+        };
+        let audience = self
+            .storage
+            .get_user(username)
+            .await
+            .ok()
+            .flatten()
+            .map(|user| user.user_id);
+        let Some(audience) = audience else {
+            return;
+        };
+        let href = match &session.2 {
+            Some(topic) => format!("/{}/chat/{}", session.0, topic),
+            None => text::chat_href(&session.0),
+        };
+        let mut draft = draft(
+            format!("chat:{history_uid}"),
+            &session.0,
+            NotificationCategory::ChatReply,
+            NotificationTone::Default,
+            text::chat_replied().to_string(),
+            href,
+            at,
+        );
+        draft.audience_user_id = Some(audience);
+        self.record(draft).await;
+    }
+
     pub async fn agent_ready(&self, agent_id: &str, build_id: &str, name: &str, at: DateTime<Utc>) {
         self.record(draft(
             format!("setup_ready:{agent_id}:{build_id}"),
@@ -357,6 +392,7 @@ fn draft(
     NotificationDraft {
         event_key,
         agent_id: agent_id.to_string(),
+        audience_user_id: None,
         category,
         tone,
         summary,
@@ -390,7 +426,8 @@ mod tests {
         init_history_schema(&conn).unwrap();
         conn.execute_batch(
             "CREATE TABLE agent_config (agent_id TEXT PRIMARY KEY, data TEXT NOT NULL);
-             CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+             CREATE TABLE state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+             CREATE TABLE \"user\" (user_id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE, data TEXT NOT NULL);",
         )
         .unwrap();
         let conn = Arc::new(Mutex::new(conn));
@@ -539,6 +576,67 @@ mod tests {
         assert!(texts.contains(&"Replied 2 times in a Discord conversation."));
         assert!(texts.contains(&"Replied once in a Telegram conversation."));
         assert_eq!(items.len(), 2, "the still-open hour is not projected");
+    }
+
+    fn user(conn: &Arc<Mutex<rusqlite::Connection>>, id: &str, username: &str) {
+        let user = crate::storage::user::User {
+            user_id: id.into(),
+            username: username.into(),
+            password_hash: String::new(),
+            role_id: "r".into(),
+            created_at: Utc::now(),
+        };
+        conn.lock()
+            .execute(
+                r#"INSERT OR IGNORE INTO "user" (user_id, username, data) VALUES (?1, ?2, ?3)"#,
+                rusqlite::params![id, username, serde_json::to_string(&user).unwrap()],
+            )
+            .unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_webui_reply_is_addressed_to_its_person_and_a_platform_reply_is_not() {
+        let (n, conn, _d) = setup();
+        agent(&conn, "a");
+        user(&conn, "u-ana", "ana");
+
+        let session = VizierSession(
+            "a".into(),
+            VizierChannelId::HTTP("ana".into(), "vizier-webui".into()),
+            Some("topic-1".into()),
+        );
+        n.chat_replied(&session, "h-1", Utc::now()).await;
+
+        let mine = n
+            .storage
+            .list_notifications("u-ana", &["a".into()], NotificationFilter::All, None, 10)
+            .await
+            .unwrap();
+        assert_eq!(mine.len(), 1);
+        assert_eq!(mine[0].category, NotificationCategory::ChatReply);
+        assert_eq!(mine[0].text, "Replied in your conversation.");
+        assert_eq!(mine[0].href, "/a/chat/topic-1");
+        assert_eq!(
+            n.storage
+                .list_notifications("u-bob", &["a".into()], NotificationFilter::All, None, 10)
+                .await
+                .unwrap()
+                .len(),
+            0,
+            "only the person whose conversation it is sees it"
+        );
+
+        // Discord/Telegram keep the hourly aggregate; no per-turn row.
+        let discord = VizierSession("a".into(), VizierChannelId::DiscordChanel(1), None);
+        n.chat_replied(&discord, "h-2", Utc::now()).await;
+        assert_eq!(
+            n.storage
+                .list_notifications("u-ana", &["a".into()], NotificationFilter::All, None, 10)
+                .await
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[tokio::test]

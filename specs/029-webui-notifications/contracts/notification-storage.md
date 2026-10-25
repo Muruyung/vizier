@@ -10,14 +10,15 @@ Added by `init_notification_schema` from `SqliteStorage::init_schema`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS notification (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    event_key   TEXT NOT NULL UNIQUE,
-    agent_id    TEXT NOT NULL,
-    category    TEXT NOT NULL,
-    tone        TEXT NOT NULL,
-    summary     TEXT NOT NULL,
-    href        TEXT NOT NULL,
-    created_at  INTEGER NOT NULL
+    id               INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_key        TEXT NOT NULL UNIQUE,
+    agent_id         TEXT NOT NULL,
+    audience_user_id TEXT,             -- NULL: everyone who can see the agent
+    category         TEXT NOT NULL,
+    tone             TEXT NOT NULL,
+    summary          TEXT NOT NULL,
+    href             TEXT NOT NULL,
+    created_at       INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_notification_created
@@ -39,7 +40,8 @@ Notes:
 - `created_at` and `read_at` are Unix milliseconds (the convention of `task_run`, `background_job`, `session_history` and the feed).
 - The connection already enables `PRAGMA foreign_keys=ON`; the read rows cascade.
 - `event_key` is the idempotency key and is not exposed by the API.
-- No existing table is altered. There is no data migration.
+- No existing table is altered. On a database created by an earlier 029 build the `audience_user_id` column is added by `add_column_if_missing`; there is no data migration because 029 was unreleased when it arrived.
+- `audience_user_id` is part of every visibility test: list, counts, per-id read and mark-all add `(audience_user_id IS NULL OR audience_user_id = ?)`. A WebUI chat reply sets it; every other category leaves it `NULL`.
 - `delete_agent` adds `DELETE FROM notification WHERE agent_id = ?` in its existing transaction, after/before the other agent-owned rows; the read rows cascade.
 - The startup sweep may optionally delete any notification whose `agent_id` no longer exists in `agent_config`; the service also refuses to insert for a missing agent.
 
@@ -101,7 +103,7 @@ pub trait NotificationStorage {
 
 - `agents` is the visibility whitelist. Empty → `[]`.
 - `filter` is applied with `LEFT JOIN notification_read r ON r.notification_id = n.id AND r.user_id = ?`.
-- Always `n.created_at >= now - 30 days`.
+- Always `n.created_at >= now - 30 days` and `(n.audience_user_id IS NULL OR n.audience_user_id = ?user)`.
 - `before` applies `(n.created_at, n.id) < (cursor_at, cursor_id)`; ordering is `n.created_at DESC, n.id DESC`.
 - `limit` is the page size; the API asks for `limit + 1` to compute `next`.
 - Returns `read = r.notification_id IS NOT NULL` per row.
@@ -112,14 +114,14 @@ One query returns `all`, `unread` and `read` over the visible agents and the ret
 
 ### `set_notification_read`
 
-- First proves the notification exists and its `agent_id` is in `agents`; otherwise returns `false` (API 404).
+- First proves the notification exists, its `agent_id` is in `agents` and its audience is the caller (or unset); otherwise returns `false` (API 404).
 - `read = true`: `INSERT … ON CONFLICT(user_id, notification_id) DO UPDATE SET read_at = excluded.read_at`.
 - `read = false`: `DELETE FROM notification_read WHERE user_id = ? AND notification_id = ?`.
 - Idempotent; returns `true` when the notification was visible, whether or not the state changed.
 
 ### `mark_all_notifications_read`
 
-- One `INSERT OR IGNORE INTO notification_read … SELECT` over visible, retained notifications.
+- One `INSERT OR IGNORE INTO notification_read … SELECT` over the caller's visible, retained notifications, audience included.
 - Returns rows inserted (not the total read count).
 - New notifications created after the statement's snapshot remain unread.
 - The service runs the reply projection before this call.
@@ -168,7 +170,8 @@ The storage never calls the permission system itself. The HTTP handler resolves 
 - A draft for a missing agent is skipped.
 - Visibility: only whitelisted agent ids appear; an empty whitelist returns empty items/counts.
 - Filter counts are independent of the selected page/filter; unread + read = all.
-- Read/unread toggles are idempotent; marking a non-visible id returns false.
+- Read/unread toggles are idempotent; marking a non-visible id returns false, and so does marking another person's addressed `chat_reply`.
+- An addressed row is listed, counted and mark-all'd only for its person; another person sees neither the row nor its count.
 - Mark-all covers all visible unread beyond the page, leaves a concurrently inserted row unread, and returns counts.
 - Keyset pages have no duplicates/gaps, including identical timestamps.
 - Retention: rows at exactly 30 days are included; older rows are not; purge deletes and cascades read rows.

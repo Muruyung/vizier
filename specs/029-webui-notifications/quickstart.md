@@ -124,6 +124,28 @@ curl -s "${auth[@]}" "$API/notifications?filter=all" | jq '.data.items[] | selec
 
 Expect `Task “Notify task” answered.` (tone `default`) and the task-run href `.../tasks?task=notify-task&run=...`. A run that ends in `Abort`/`Empty`/no message becomes `ended without an answer.` and tone `failed`; a restart-interrupted run becomes `was interrupted.`. The title is captured at fire time; deleting the task later leaves the notification readable.
 
+## 3b. WebUI chat reply (the sender only)
+
+A WebUI conversation's reply is a notification for the person whose conversation it is, and for nobody else. In the browser: open an agent's chat, send a message, switch to another page, and wait for the reply. Exactly one `chat_reply` appears in that person's inbox, with text `Replied in your conversation.` and the conversation's href; it is not on the page itself (it is in the bell).
+
+On the API, the same turn can be driven over the socket with the dummyplug protocol:
+
+```sh
+# as ana: send a chat turn on a topic of your own
+# (the WebUI uses channel "vizier-webui"; any id works in the URL)
+node - <<'JS'
+const login = await fetch('http://localhost:9999/api/v1/auth/login', { method: 'POST', headers: {'content-type':'application/json'}, body: JSON.stringify({username:'admin', password:'admin'}) }).then(r => r.json())
+const ws = new WebSocket(`ws://localhost:9999/api/v1/agents/dp-a/channel/vizier-webui/topic/notify-chat/chat?token=${login.data.token}`)
+await new Promise((res) => (ws.onopen = res))
+ws.send(JSON.stringify({ timestamp: new Date().toISOString(), user: 'admin', content: { chat: 'hello' }, metadata: {} }))
+await new Promise((res) => setTimeout(res, 6000))
+ws.close()
+JS
+curl -s "${auth[@]}" "$API/notifications?filter=all" | jq '.data.items[] | select(.category=="chat_reply")'
+```
+
+Expect `Replied in your conversation.` and `href: "/dp-a/chat/notify-chat"`. Sign in as a second person who can see `dp-a` and check their inbox: `chat_reply` is absent (list, counts and a per-id `PUT` all behave as not found). A turn that ends aborted/empty, a Discord/Telegram turn, and a background report add no `chat_reply`.
+
 ## 4. Background job notification (dummyplug)
 
 Ask the agent for the tool schema and start a background batch from a script:
@@ -275,6 +297,7 @@ Run on a `--workspace /tmp/vizier-notify-ws --port 19999` scratch install, dummy
 | §2 read state | `PUT {read:true}` → `{all: 2, unread: 1, read: 1}`; `filter=unread` listed only the unread row, `filter=read` only the read one; `POST /read-all` → `{all: 2, unread: 0, read: 2}` |
 | §2 persistence | killed the process, restarted it: the three rows kept their ids and `read` flags (`3` unread, `2`/`1` read), and the startup sweep added nothing |
 | §3 task run | one-time `morning-digest` fired on the next tick: `{category: "task_run", tone: "default", text: "Task “Morning digest” answered.", href: "/scribe/tasks?task=morning-digest&run=1", read: false}` |
+| §3b chat reply | a WebUI turn on topic `topic-abc` produced `{category: "chat_reply", text: "Replied in your conversation.", href: "/scribe/chat/topic-abc"}` for `ana` (`counts {all: 1, unread: 1}`); `bob`, a superadmin who can also see `scribe`, saw `{all: 0, unread: 0}` |
 | §7 replies | rewound `notifications.replies_through` and inserted two Discord + one Telegram response in the previous hour: one `Replied 2 times in a Discord conversation.` and one `Replied once in a Telegram conversation.` appeared, with the conversation hrefs; a second call returned the same counts (idempotent) |
 | §4 background job | sent the quickstart's `background_subagents` call through the WebSocket dummyplug protocol; after the piece answered and the report was delivered, exactly one `{category: "background_job", text: "Background batch reported back.", href: "/scribe/chat"}` appeared (nothing while it was `running`/`reporting`) |
 | §5 start failure | deleted the custom provider `notify-custom` under agent `dp-fail` (`DELETE …?confirm=true`): one `{category: "agent_start_failure", tone: "failed", text: "Failed to start: agent failed to start: provider \"notify-custom\" is not available; pick another provider. Retrying in 2s.", href: "/dp-fail/config"}` despite the supervisor reaching `failures: 4` |
