@@ -25,7 +25,7 @@ How Vizier calls OpenRouter for speech, transcription and images, and how the mo
 - `speed` is omitted when it is exactly `1.0`; a configured non-default value is sent. Providers without speed control ignore it or reject only non-default values (OpenRouter docs).
 - No `instructions`, `input_references` or multi-speaker input in this feature.
 
-**Response**: raw audio bytes, `Content-Type: audio/mpeg`. `OpenAiTts` converts them to WAV for session files.
+**Response**: raw audio bytes, `Content-Type: audio/mpeg`. `OpenAiTts` converts them to WAV for session files. Kokoro returns **one MP3 stream per sentence, concatenated**; each stream carries its own Xing/Info header with a byte count, and `mp3_to_wav` decodes them one at a time and appends the samples. One reader over the concatenation stops after the first stream, which used to cut every spoken reply off at its first punctuation.
 
 **Errors**: JSON (or text) error body; `http::send` + `dialect::error_in_body` surface the provider explanation as `VizierError`. Unknown voice/model, unsupported speed and insufficient credit follow the same path.
 
