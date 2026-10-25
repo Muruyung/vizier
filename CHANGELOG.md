@@ -2,11 +2,51 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.2] - 2026-10-25
+
+### 🚀 Features
+
+- Link submodule PRs and merge them bottom-up with /cascade-merge
+- Per-agent secrets with script-only retrieval, redaction and a WebUI page (#96)
+- OpenRouter as a media provider (STT, TTS, images) with model discovery (#99)
+- *(secrets)* Page and search the secrets table
+- Persist a notification inbox and retire the overview feed
+- Notify a person when their WebUI chat turn replies
+- Announce new notifications with a toast and simplify the row
+
+### 🐛 Bug Fixes
+
+- *(ci)* Name the repository when resolving the cascade's PR (#97)
+- Agent tools form, collapsed sidebar and context ring (design + webui bump) (#98)
+- Decode every concatenated MP3 stream in a spoken reply
+- Keep a single notification bell on the phone layout
+
+### 🚜 Refactor
+
+- Move the notification bell into the page header
+
+### 📚 Documentation
+
+- Record the header bell in the 029 spec, plan and UI contract
+- The bell is a header control; the phone menu opens from the left
+- Eye read state, on-screen auto-read, collapsed details and outside-click close
+- Unread notifications carry an emerald card outline
+- Toasts stack top-right under the header
+
+### ⚙️ Miscellaneous Tasks
+
+- Sync design and webui to their master branches, bump lockfile to 0.13.1
+- Bump design and webui for the usage chart
+- Bump webui for recalled memory ordering
 ## [0.13.1] - 2026-10-24
 
 ### 🚀 Features
 
 - Add show_discord_chats/show_telegram_chats permissions, fix dream provider display
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump version to 0.13.1
 ## [0.13.0] - 2026-10-24
 
 ### 🚀 Features

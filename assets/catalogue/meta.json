@@ -1,10 +1,11 @@
 {
-  "etag": "\"4773c7c9cbd6b4be15c5519cf4f1aa6b\"",
-  "fetched_at": "2026-10-24T10:18:12Z",
-  "models": 8893,
+  "etag": "\"cf5c6e4d5f1020f38b254951737c7b90\"",
+  "fetched_at": "2026-10-25T03:49:57Z",
+  "models": 8936,
   "no_logo": [
     "aion-labs",
     "aisingapore",
+    "aleph-alpha",
     "alibaba-token-plan-cn",
     "amazon",
     "anthracite-org",
@@ -65,7 +66,7 @@
     "voyageai",
     "writer"
   ],
-  "providers": 230,
+  "providers": 232,
   "schema": 1,
   "source_url": "https://models.dev/api.json"
 }
