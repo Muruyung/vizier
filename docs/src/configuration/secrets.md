@@ -39,7 +39,7 @@ Redaction is a display and transcript guarantee, not a sandbox: the script itsel
 
 ## WebUI
 
-**Secrets** sits in the sidebar's Misc group for people who may manage the selected agent's secrets. The page lists each name with its server-computed mask, when and by whom it last changed, and **Recent changes** (the newest 20 create/replace/delete events, with actor and time but never a value or hash).
+**Secrets** sits in the sidebar's Misc group for people who may manage the selected agent's secrets. The page is a searchable, paginated table of each name with its server-computed mask and when and by whom it last changed, with **Recent changes** beside it (the newest 20 create/replace/delete events, with actor and time but never a value or hash).
 
 - **Add secret** asks for a name and a value. The value field is a password field and is never shown again.
 - **Replace** writes a new value to the same name; the old one is not fetched or displayed.
@@ -61,7 +61,7 @@ All routes require a bearer token. A **secret manager** is a system role, a hold
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| `GET` | `/api/v1/agents/{id}/secrets` | Names, masks and last change, sorted by name |
+| `GET` | `/api/v1/agents/{id}/secrets` | Names, masks and last change; `?q=`, `?sort=name\|updated`, and `?limit=` for a page with `total` and `counts` |
 | `PUT` | `/api/v1/agents/{id}/secrets/{name}` | Create (`201`) or replace (`200`); body is `{ "value": "…" }` |
 | `DELETE` | `/api/v1/agents/{id}/secrets/{name}` | Delete; `404` when the name does not exist |
 | `GET` | `/api/v1/agents/{id}/secrets/events?limit=20` | Change log |

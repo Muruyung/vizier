@@ -2,7 +2,7 @@
 //! or replace, delete, and the change log. Every read is a person managing the agent's store
 //! (`secrets::access`); no response carries a value — only the server-computed mask.
 
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 use axum::{
     Extension, Json, Router,
@@ -19,6 +19,7 @@ use crate::{
     channels::http::{
         api::v1::integrations::{agents_by_id, fail, ok, plain, requester_name, usernames},
         auth::AuthenticatedUser,
+        models::page::{self, ListQuery, Listing, SortKey, SortOrder},
         state::HTTPState,
     },
     schema::{AgentConfig, AgentId, AgentSecretEvent, Requester, SecretAction},
@@ -54,8 +55,51 @@ pub struct SecretItem {
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
 pub struct SecretList {
-    /// Sorted by name.
+    /// By default sorted by name.
     pub items: Vec<SecretItem>,
+    /// With `limit`: matches after `q`, before `offset`/`limit`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub total: Option<usize>,
+    /// With `limit`: matches per filter key (`all`). Always carries `all`.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub counts: Option<BTreeMap<String, usize>>,
+}
+
+/// The secrets table's search and sort. Names and the person or agent who last changed them are
+/// searchable; there is no filter beyond `all`.
+pub struct SecretListing;
+
+impl Listing<SecretItem> for SecretListing {
+    fn matches(&self, item: &SecretItem, q: &str) -> bool {
+        item.name.to_lowercase().contains(q) || item.updated_by_name.to_lowercase().contains(q)
+    }
+
+    fn filter_keys(&self, _: &[SecretItem]) -> Vec<String> {
+        Vec::new()
+    }
+
+    fn in_filter(&self, _: &str, _: &SecretItem) -> bool {
+        false
+    }
+
+    fn sort_key(&self, item: &SecretItem, sort: &str) -> SortKey {
+        match sort {
+            "updated" => SortKey::Num(item.updated_at.timestamp_millis()),
+            _ => SortKey::text(&item.name),
+        }
+    }
+
+    fn sorts(&self) -> &'static [&'static str] {
+        &["name", "updated"]
+    }
+
+    fn default_order(&self, sort: &str) -> SortOrder {
+        if sort == "updated" {
+            SortOrder::Desc
+        } else {
+            SortOrder::Asc
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, utoipa::ToSchema)]
@@ -195,9 +239,9 @@ fn secret_error(err: SecretError) -> Response {
 #[utoipa::path(
     get,
     path = "/agents/{agent_id}/secrets",
-    params(("agent_id" = String, Path, description = "Agent ID")),
+    params(("agent_id" = String, Path, description = "Agent ID"), ListQuery),
     responses(
-        (status = 200, description = "Names, masks and last change, sorted by name. No values", body = crate::channels::http::models::response::APIResponse<SecretList>),
+        (status = 200, description = "Names, masks and last change, sorted by name. With `limit`, one page with `total` and `counts`. No values", body = crate::channels::http::models::response::APIResponse<SecretList>),
         (status = 403, description = "The caller is not a secret manager for this agent"),
         (status = 404, description = "Agent not found")
     )
@@ -206,6 +250,7 @@ pub async fn list(
     State(state): State<HTTPState>,
     Extension(user): Extension<AuthenticatedUser>,
     Path(agent_id): Path<String>,
+    Query(paging): Query<ListQuery>,
 ) -> Response {
     if let Err(response) = manageable_agent(&state, &user, &agent_id).await {
         return *response;
@@ -217,7 +262,24 @@ pub async fn list(
     let agents = agents_by_id(&state).await;
     let users = usernames(&state).await;
     let items = records.into_iter().map(|record| item(record, &agents, &users)).collect();
-    ok(StatusCode::OK, SecretList { items })
+    // Without `limit` the answer stays the unpaged list clients have always got; paging is opt-in.
+    if !paging.is_paged() {
+        return ok(
+            StatusCode::OK,
+            SecretList { items, total: None, counts: None },
+        );
+    }
+    match page::paginate(items, &SecretListing, &paging) {
+        Ok(page) => ok(
+            StatusCode::OK,
+            SecretList {
+                items: page.items,
+                total: Some(page.total),
+                counts: Some(page.counts),
+            },
+        ),
+        Err(e) => plain(StatusCode::BAD_REQUEST, e.code),
+    }
 }
 
 #[utoipa::path(
@@ -389,9 +451,47 @@ mod tests {
             updated_by: Requester::Agent("dp-a".into()),
             updated_by_name: "dv-a".into(),
         };
-        let text = serde_json::to_string(&SecretList { items: vec![item] }).unwrap();
+        let text = serde_json::to_string(&SecretList { items: vec![item], total: None, counts: None }).unwrap();
         assert!(text.contains("masked"));
         assert!(!text.contains("\"value\""));
+    }
+
+    /// Paging is opt-in and searches names and whoever last changed them.
+    #[test]
+    fn the_listing_searches_names_and_sorts_by_name_or_update() {
+        let now = Utc::now();
+        let item = |name: &str, by: &str, at: DateTime<Utc>| SecretItem {
+            name: name.into(),
+            masked: "••••c123".into(),
+            created_at: now,
+            updated_at: at,
+            updated_by: Requester::User("u".into()),
+            updated_by_name: by.into(),
+        };
+        let items = vec![
+            item("TOKEN", "alice", now - chrono::Duration::hours(1)),
+            item("API_KEY", "bob", now),
+        ];
+
+        let page = page::paginate(
+            items.clone(),
+            &SecretListing,
+            &ListQuery { q: Some("ali".into()), limit: Some(25), ..Default::default() },
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(page.total, 1);
+        assert_eq!(page.items[0].name, "TOKEN");
+        assert_eq!(page.counts["all"], 1);
+
+        let page = page::paginate(
+            items,
+            &SecretListing,
+            &ListQuery { sort: Some("updated".into()), limit: Some(25), ..Default::default() },
+        )
+        .ok()
+        .unwrap();
+        assert_eq!(page.items[0].name, "API_KEY");
     }
 
     /// `201` for a new name and `200` for a replace, as the routes document.
