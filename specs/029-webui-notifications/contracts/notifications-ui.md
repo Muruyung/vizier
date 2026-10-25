@@ -110,7 +110,7 @@ One notification is a **card**: a bordered `rounded-lg` surface with the agent's
 
 ## 5a. Arrival toast
 
-When the list is **closed** and the 15 s poll finds a new notification, the shell shows one **timed toast** (bottom-right, the design `Toast`):
+When the list is **closed** and the 15 s poll finds a new notification, the shell shows one **timed toast** (top-right, just under the page header, the design `Toast`):
 
 - Single arrival: the agent's name as the title and the summary as the message; clicking it marks the notification read and opens its destination. Tone follows the notification (`failed` → error, `success` → success, otherwise info).
 - A burst (several at once): one toast, `N new notifications`, whose action opens the panel.
