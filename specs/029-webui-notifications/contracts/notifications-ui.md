@@ -93,7 +93,7 @@ One notification is a **card**: a bordered `rounded-lg` surface with the agent's
 └───────────────────────────────────────────────┘
 ```
 
-- **No unread gutter or dot.** The read toggle's **eye** is also the state: closed (`eye-closed`) means unread, open (`eye`) means read. It sits on the title line, immediately **left of the time**, and is always visible so unread rows are scannable. The card itself steps up (`bg-raised`) when unread and is flat (`bg-surface`) when read; the summary tone follows (`text-soft` unread, `text-muted` read; `failed`/`success` keep their tone), and a visually hidden `Unread` is in the row's accessible text. Read and unread rows keep the same shape.
+- **No unread gutter or dot.** The read toggle's **eye** is also the state: closed (`eye-closed`) means unread, open (`eye`) means read. It sits on the title line, immediately **left of the time**, and is always visible so unread rows are scannable. The card's border is the live emerald (`border-live`) when unread and the neutral `border-border` when read; the summary tone follows (`text-soft` unread, `text-muted` read; `failed`/`success` keep their tone), and a visually hidden `Unread` is in the row's accessible text. Read and unread rows keep the same shape.
 - **Sigil**: the agent's identicon, `md` (34px).
 - **Title**: the agent's name (the agent store, falling back to `agent_id`).
 - **Time**: `feedTime` (`14:02`, `yesterday`, `Oct 21`), mono/faint, right-aligned on the title line.
@@ -159,7 +159,7 @@ When the list is **closed** and the 15 s poll finds a new notification, the shel
 - The header bell is a button with an accessible name including “Notifications”, the unread count and the busy state. The badge is not the only carrier.
 - The panel is a modal dialog named `Notifications`; focus is trapped, Escape closes, focus returns to the bell.
 - Filters are a named group (`Filter notifications`) with pressed state; counts are read with the labels.
-- Unread is never colour-only: the row's accessible name says `Unread`, the eye is closed, the card is raised and the summary tone changes.
+- Unread is never colour-only: the row's accessible name says `Unread`, the eye is closed, the card is outlined in emerald and the summary tone changes.
 - Failure is conveyed by wording and colour; ready uses wording; unread uses the summary's tone and the hidden word (no dot).
 - The setup card is `role="status"`; the progress bar has `aria-valuemin/max/now` and a label, or is indeterminate.
 - The mark action has an explicit label; its hit area is large enough on touch; it is keyboard reachable and visible on focus.
