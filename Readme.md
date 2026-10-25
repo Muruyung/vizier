@@ -5,12 +5,13 @@
 
 Vizier is a Rust-based AI agent framework: a single binary that runs multiple concurrent AI agents — each with its own provider, tools, memory, and identity — exposed over Discord, Telegram, and HTTP (REST + WebSocket + a bundled React WebUI). Storage is embedded SQLite; no external services required.
 
-📖 **Docs:** `docs/` (mdBook) — start with `docs/src/introduction.md`.
+🌐 **Website:** https://www.vizier.rs — landing page, blog and documentation.
+📖 **Docs source:** `docs/src/` — rendered by the `landing/` site at https://www.vizier.rs/docs.
 
 ## Features
 
 - **Multi-channel** — Discord, Telegram, REST, WebSocket, WebUI. Each agent gets its own bot token per platform; slash commands for sessions, checkpoints, and aborts.
-- **29 providers** — Ollama, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Xiaomi MiMo, Groq, Mistral, xAI, Perplexity, Moonshot, Z.ai, MiniMax, Together, Cohere, Hugging Face, Hyperbolic, Voyage AI, Galadriel, Mira, ChatGPT (OAuth), GitHub Copilot, Azure OpenAI, OpenCode Zen/Go, and any OpenAI-compatible `custom` endpoint (via [rig](https://github.com/0xPlaygrounds/rig)).
+- **29 providers** — Ollama, llama.cpp, OpenAI, Anthropic, Gemini, DeepSeek, OpenRouter, Xiaomi MiMo, Groq, Mistral, xAI, Perplexity, Moonshot, Z.ai, MiniMax, Together, Cohere, Hugging Face, Hyperbolic, Voyage AI, Galadriel, Mira, ChatGPT (OAuth), GitHub Copilot, Azure OpenAI, OpenCode Zen/Go, and any OpenAI-compatible `custom` endpoint.
 - **Open-format memory** — long-term memory is plain markdown on disk, organized into per-agent bundles with a link graph (`[label](concept.md)`, `[[bundle/slug]]`), semantic search via a per-agent embedding model (local fastembed or cloud), and `.zip` export/import.
 - **Tools** — shell (local or Docker sandbox), Brave web/news search, web fetch, HTTP client, cron & one-time scheduler, memory graph tools, skills, session files (PDF/DOCX/XLSX/images), TTS / STT / image generation, parallel sub-tasks, inter-agent consult/delegate, per-agent MCP servers.
 - **Python sandbox & code mode** — opt-in `execute_python` running an in-process, isolated Python interpreter (no files, network or OS; bounded by the agent's tool timeout). With **code mode** on, the agent's tools become functions inside scripts and are hidden from the model, so one script can loop over many tool calls and only its final result enters the context. Deferred: memory ceiling, tool-call cap, output truncation.
@@ -102,6 +103,8 @@ just run         # cargo run -- run --config dev.vizier.yaml
 just run-d       # same, detached
 just shutdown    # stop the dev instance
 just build       # build the WebUI (npm run build)
+just landing     # the website (landing, blog, docs) on http://localhost:4321
+just landing-build  # build the website
 just release     # cargo build --release
 just docker      # docker-compose down && up -d
 just jaeger      # local Jaeger for traces, UI at http://localhost:16686
@@ -115,17 +118,18 @@ cd webui && npm run dev   # the WebUI on http://localhost:5173, proxying /api to
 
 Tracing and metrics are exported over OpenTelemetry when `OTEL_EXPORTER_OTLP_ENDPOINT` is set; see [Observability](docs/src/configuration/observability.md).
 
-> **Build gotcha:** the WebUI (`webui/`) and its component library (`design/`) are git submodules. Clone with `--recurse-submodules`, or run `git submodule update --init --recursive`. `build.rs` runs `npm run build` in `webui/` on every `cargo build` if `webui/node_modules/` exists; if `node_modules/` is absent and `webui/build/client/` doesn't exist, the build panics — run `just install` first. `legacy/` holds the previous WebUI for reference; it is never built, served or packaged.
+> **Build gotcha:** the WebUI (`webui/`), its component library (`design/`) and the website (`landing/`) are git submodules. Clone with `--recurse-submodules`, or run `git submodule update --init --recursive`. `build.rs` runs `npm run build` in `webui/` on every `cargo build` if `webui/node_modules/` exists; if `node_modules/` is absent and `webui/build/client/` doesn't exist, the build panics — run `just install` first. `landing/` is not part of the binary build. `legacy/` holds the previous WebUI for reference; it is never built, served or packaged.
 
-### Design library and WebUI submodules
+### Design library, WebUI and landing submodules
 
-`design/` is a git submodule: [vizier-lab/design](https://github.com/vizier-lab/design), the UI component library with a Storybook catalogue that is the source of truth for the design. `webui/` is a submodule too: [vizier-lab/webui](https://github.com/vizier-lab/webui), the WebUI, built from that library (`"@vizier/design": "file:../design"`).
+`design/` is a git submodule: [vizier-lab/design](https://github.com/vizier-lab/design), the UI component library with a Storybook catalogue that is the source of truth for the design. `webui/` is a submodule too: [vizier-lab/webui](https://github.com/vizier-lab/webui), the WebUI, built from that library (`"@vizier/design": "file:../design"`). `landing/` is [vizier-lab/landing](https://github.com/vizier-lab/landing), the website (Astro + Starlight). It reads `docs/` and links `design/` from this checkout, so docs and design stay in one place.
 
 ```sh
 git clone --recurse-submodules https://github.com/vizier-lab/vizier.git   # new clone
 git submodule update --init --recursive                                    # existing clone
 
 cd design && npm install && npm run storybook   # catalogue on http://localhost:6006
+just landing                                   # website on http://localhost:4321
 ```
 
 To move vizier to a newer library commit, bump the pin like any other change:
@@ -155,11 +159,12 @@ src/
   command/          Unix-socket command server (shutdown, health) for the CLI
 webui/              submodule: vizier-lab/webui (React Router v7 + React 19 + Tailwind v4); built output served by the HTTP channel
 design/             submodule: vizier-lab/design, the UI library + Storybook catalogue
+landing/            submodule: vizier-lab/landing, the website (landing page, blog, docs)
 legacy/             the previous WebUI, kept for reference; never built or served
 templates/          CORE.md seed for new agents
 skills/             skill registry (installed with `vizier skill install <slug>`)
 vizier-derive/      #[derive(MarkdownDoc)] for frontmatter+body documents
-docs/               mdBook documentation
+docs/               documentation source, rendered by landing/ as www.vizier.rs/docs
 specs/              design specs (Spec Kit)
 ```
 

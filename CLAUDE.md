@@ -15,6 +15,8 @@ just run          # cargo run -- run --config dev.vizier.yaml
 just run-d        # same, detached (-d)
 just shutdown     # cargo run -- shutdown --config dev.vizier.yaml
 just build        # cd webui && npm run build
+just landing      # the website (landing, blog, docs) on http://localhost:4321
+just landing-build # build the website
 just release      # cargo build --release
 just catalogue-update  # refresh assets/catalogue/ (models.dev seed + logos) — needs network
 just test-scripts  # node --test for scripts/*.mjs (the submodule PR automation)
@@ -182,6 +184,16 @@ Each agent's persistent "self" document is `CORE.md`, stored in storage (not the
 The WebUI is the submodule `vizier-lab/webui` (spec 024), built on the `design/` submodule (`vizier-lab/design`, spec 022): React components on hand-written tokens, with a Storybook catalogue that is the source of truth for the design. A change to a component is made in `design/` first, then used in `webui/`, then vizier's pins are bumped (commit order: design → webui → vizier). Comment `/cascade-merge` on a vizier PR to merge all three in that order: `scripts/submodule-prs.mjs` (driven by `.github/workflows/submodule-prs.yml`) merges the linked submodule PRs, bumps the gitlinks to what landed, and merges the vizier PR — see `docs/src/getting-started/contributing.md`. The previous WebUI is in `legacy/` for reference only; don't edit it.
 
 React Router v7 (SPA, `ssr: false`) + React 19 + TypeScript + Tailwind v4, composing `@vizier/design` only. State in Zustand stores in `app/stores/`, pure logic with vitest tests in `app/lib/` (the turn reducer `lib/frames.ts`, the trail model `lib/trail.ts`, paging), the typed API client and topic socket in `app/api/` (`schema.d.ts` is generated from the server's OpenAPI by `scripts/openapi.mjs`), screens in `app/routes/` and `app/screens/`. `npm run dev` serves on `:5173` and proxies `/api` to vizier on `:9999`. Build output (`webui/build/client/`) is what the Rust HTTP channel serves at runtime — see the `build.rs` gotcha above.
+
+## Website (`landing/`)
+
+The website is the submodule `vizier-lab/landing`, an Astro 7 + Starlight site served at `www.vizier.rs`. It owns three surfaces: the landing page at `/`, the blog at `/blog`, and the documentation at `/docs`. It is not part of the Rust binary or `cargo package`; `build.rs` never touches it.
+
+**Sources stay in this repo.** `docs/src/` is the only docs source; `scripts/sync-vizier.mjs` copies it into the Starlight collection at build time, adds frontmatter (title, edit link), strips the source H1, rewrites relative `.md` links to `/docs/.../`, turns GitHub alert markers into labelled blockquotes, and generates the sidebar from `docs/src/SUMMARY.md`. Links to files outside the docs tree (the illustrative memory links) and code-fenced links are left alone. Blog posts are authored in `landing/src/content/blog/`, not here.
+
+**The design system is shared, not copied.** `landing/package.json` consumes `@vizier/design` as `file:./design`; `landing/scripts/link-design.mjs` creates `landing/design` as a symlink to this checkout's `design/` (the deploy workflow points it at `.vizier-source/design`). There is one design pin, on this repo. The landing build imports `@vizier/design/styles.css` and components exactly like the WebUI; only interactive pieces hydrate. The landing repo cannot build without a vizier checkout, which is already true for docs.
+
+**Deploy.** Push to `landing` main deploys that repo's Pages site. A vizier release dispatches `repository_dispatch` type `vizier-release` to `vizier-lab/landing` with `{version, ref}` (the release tag), so the site shows that version and its docs. `vizier` needs the `LANDING_DISPATCH_TOKEN` secret (fine-grained PAT, `landing`, Contents read/write). `SITE_URL` and `BASE_PATH` come from `actions/configure-pages`, so the same build works at `vizier-lab.github.io/landing/` and `www.vizier.rs`. The deploy workflow is `.github/workflows/deploy.yml` in the landing repo. `book.vizier.rs` stays on this repo's Pages: `.github/workflows/deploy-docs-redirect.yml` replaces the old mdBook artifact with a redirect to `/docs` (run it by hand at cutover). See `landing/README.md`.
 
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,

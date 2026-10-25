@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Vizier documentation has moved</title>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 40rem; margin: 15vh auto; padding: 0 1.5rem; line-height: 1.6; color: #111; }
+      a { color: #047857; }
+    </style>
+    <script>
+      (() => {
+        const old = location.pathname.replace(/\/index\.html$/, "/").replace(/\.html$/, "");
+        let path = old;
+        if (path === "/" || path === "/print" || path === "/404") path = "/docs/";
+        else if (!path.startsWith("/docs")) path = "/docs" + path;
+        if (!path.endsWith("/")) path += "/";
+        location.replace("https://www.vizier.rs" + path + location.hash);
+      })();
+    </script>
+  </head>
+  <body>
+    <h1>Documentation has moved</h1>
+    <p>The Vizier documentation now lives at <a href="https://www.vizier.rs/docs/">www.vizier.rs/docs</a>.</p>
+  </body>
+</html>

@@ -6,6 +6,7 @@ Vizier is one Rust binary that embeds its WebUI. The WebUI and the component lib
 |------|------------|------------|
 | `webui/` | `vizier-lab/webui` | The WebUI (React Router, built to `webui/build/client/`) |
 | `design/` | `vizier-lab/design` | The component library and its Storybook catalogue |
+| `landing/` | `vizier-lab/landing` | The website: landing page, blog and docs (Astro + Starlight) |
 | `legacy/` | (this repository) | The previous WebUI, kept for reference. It is never built, served or packaged |
 
 ## First build
@@ -13,11 +14,20 @@ Vizier is one Rust binary that embeds its WebUI. The WebUI and the component lib
 ```sh
 git clone --recurse-submodules https://github.com/vizier-lab/vizier.git
 cd vizier
-just install     # submodules, npm install in design/ and webui/, cargo fetch
+just install     # submodules, npm install in design/, webui/ and landing/, cargo fetch
 just run         # builds the WebUI, then runs vizier with dev.vizier.yaml
+just landing     # the website on http://localhost:4321 (docs + design from this checkout)
 ```
 
 If you cloned without `--recurse-submodules`, run `git submodule update --init --recursive`. A `cargo build` with no `webui/node_modules/` and no pre-built `webui/build/client/` stops with a message saying so.
+
+## Working on the website
+
+Docs are authored in `docs/src/`, next to the code. The website syncs them at
+build time; `just landing` starts it on http://localhost:4321. Blog posts live
+in `landing/src/content/blog/`. The site is deployed to www.vizier.rs from the
+[`landing`](https://github.com/vizier-lab/landing) repository, and a vizier
+release dispatches a deploy with the release tag.
 
 ## Working on the WebUI
 

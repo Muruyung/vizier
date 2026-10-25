@@ -38,7 +38,40 @@ jobs:
     secrets: inherit
 
   # ====================
-  # Step 3: Docker Publish
+  # Step 3: Deploy the website
+  # ====================
+  # This is deliberately not part of cleanup-failure's needs: a landing deploy
+  # failure must never delete a published release and tag.
+  deploy-landing:
+    name: Deploy Landing
+    needs: release
+    if: ${{ !inputs.dry_run && needs.release.result == 'success' }}
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Check dispatch token
+        id: token
+        env:
+          TOKEN: ${{ secrets.LANDING_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::LANDING_DISPATCH_TOKEN is not set; the website will not be redeployed"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch landing deploy
+        if: steps.token.outputs.present == 'true'
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.LANDING_DISPATCH_TOKEN }}
+          repository: vizier-lab/landing
+          event-type: vizier-release
+          client-payload: '{"version":"${{ inputs.version }}","ref":"v${{ inputs.version }}"}'
+
+  # ====================
+  # Step 4: Docker Publish
   # ====================
   docker:
     name: Docker Publish
@@ -54,7 +87,7 @@ jobs:
   # ====================
   summary:
     name: Summary
-    needs: [release, publish, docker]
+    needs: [release, publish, docker, deploy-landing]
     if: ${{ always() && !inputs.dry_run && needs.release.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -72,6 +105,7 @@ jobs:
           echo "- ✅ GitHub Release created with assets" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Published to crates.io" >> $GITHUB_STEP_SUMMARY
           echo "- ✅ Published Docker image to Docker Hub & GHCR" >> $GITHUB_STEP_SUMMARY
+          echo "- Website deploy: ${{ needs.deploy-landing.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Install:" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY

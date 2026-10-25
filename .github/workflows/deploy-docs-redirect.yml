@@ -1,13 +1,8 @@
-name: Deploy Book
+name: Deploy Docs Redirect
 
+# The old mdBook site at book.vizier.rs now forwards to the website's /docs.
+# Run this once, by hand, when the new site is live on www.vizier.rs.
 on:
-  push:
-    branches:
-      - master
-    paths:
-      - 'docs/**'
-  release:
-    types: [published]
   workflow_dispatch:
 
 permissions:
@@ -16,7 +11,7 @@ permissions:
   id-token: write
 
 concurrency:
-  group: "pages"
+  group: pages
   cancel-in-progress: false
 
 jobs:
@@ -29,21 +24,10 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v5
 
-      - name: Install mdBook
-        run: |
-          curl --proto '=https' --tlsv1.2 https://sh.rustup.rs -sSf -y | sh
-          rustup update
-          cargo install --version 0.4.40 mdbook
-
-      - name: Build Book
-        run: |
-          cd docs
-          mdbook build
-
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./docs/book
+          path: ./docs-redirect
 
   deploy:
     environment:

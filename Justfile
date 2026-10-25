@@ -7,6 +7,7 @@ install:
   git submodule update --init --recursive
   cd design && npm i
   cd webui && npm i
+  cd landing && VIZIER_SOURCE=.. node scripts/link-design.mjs && VIZIER_SOURCE=.. npm i
   @echo -e "\n\\e[1;32mDone\\e[0m"
 
 run:
@@ -44,6 +45,17 @@ docker:
 
 build:
   @cd webui && npm run build
+
+# The website (landing page, blog and docs) lives in the landing/ submodule and
+# is built from the same docs/ and design/ sources as this checkout.
+landing:
+  @cd landing && VIZIER_SOURCE=.. npm run dev
+
+landing-build:
+  @cd landing && VIZIER_SOURCE=.. npm run build
+
+landing-sync:
+  @cd landing && VIZIER_SOURCE=.. npm run sync
 
 release:
   @cargo build --release

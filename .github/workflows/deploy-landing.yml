@@ -1,0 +1,41 @@
+name: Deploy Landing (docs)
+
+# Docs changes are deployed between releases too. The landing workflow checks
+# out vizier master for docs and keeps the latest released version in the chip.
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'docs/**'
+      - 'docs-redirect/**'
+      - '.github/workflows/deploy-landing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dispatch:
+    name: Dispatch landing deploy
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check dispatch token
+        id: token
+        env:
+          TOKEN: ${{ secrets.LANDING_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "::warning::LANDING_DISPATCH_TOKEN is not set; skipping the landing deploy"
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Dispatch
+        if: steps.token.outputs.present == 'true'
+        uses: peter-evans/repository-dispatch@v4
+        with:
+          token: ${{ secrets.LANDING_DISPATCH_TOKEN }}
+          repository: vizier-lab/landing
+          event-type: vizier-release
+          client-payload: '{"ref":"master"}'
