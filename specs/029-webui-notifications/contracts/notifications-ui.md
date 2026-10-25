@@ -2,30 +2,25 @@
 
 **Feature**: `029-webui-notifications` | **Plan**: [../plan.md](../plan.md) | **Spec**: [../spec.md](../spec.md)
 
-The UI has one new surface (the notification panel) and one changed entry (the sidebar). It composes existing design primitives; the only design-system extensions are the bell glyph, a nav count/busy state, a `ListItem` action slot, and an `AgentStartingCard` downloads/width slot.
+The UI has one new surface (the notification panel) and a bell in every page header. It composes existing design primitives; the only design-system extensions are the bell glyph, an `IconButton` count/busy state, a `ListItem` action slot, and an `AgentStartingCard` downloads/width slot.
 
-## 1. Sidebar entry
+## 1. Header bell
 
-Placed immediately **above Settings** in the sidebar footer, below the page groups and the flexible spacer.
+At the right end of the page header on every screen: the shared `PageFrame` (and therefore `SettingsFrame`), Home's header, the chat header, and the phone top bar (AppShell's, or the chat's own). It is the last item in the actions row, after the page's own buttons.
 
 ```
-🔔 Notifications   3
-⚙ Settings
-◐ Theme
-⇤ Collapse
-@ you
+┌───────────────────────────────────────────────┐
+│ Tasks            [New task]  [🔔 3]           │
+└───────────────────────────────────────────────┘
 ```
 
-- It is a **button** (`NavItem` with `onSelect`), not a route link, because the panel opens in place.
-- The icon is the new `bell`. The label is `Notifications`.
-- The count is the person's unread count for visible agents. Hidden when zero. Display is capped (`99+`); the filter tab shows the true count.
-- While any visible agent is starting or downloading, a **separate busy indicator** shows (a small pulsing dot / the existing dot-wave language), distinct from the count. It is not an unread notification and does not increment the count.
-- Expanded: a small mono count pill at the end of the row. Collapsed (64px rail): the bell, a dot for unread and/or busy, and a tooltip whose label includes the unread count (`Notifications · 3 unread`).
-- The button's accessible name is `Notifications`, plus the unread count in words and the busy state; the visible badge is not the only carrier.
-- Clicking closes the phone navigation drawer first (if open) and then opens the panel.
-- The entry is visible even with no agents; it opens the empty state. It is never hidden by `hiddenPages`.
+- It is an **`IconButton`** (`variant="ghost"`, `icon="bell"`) and opens the panel in place; it is not a route link.
+- The count is the person's unread count for visible agents. The badge is hidden at zero and capped at `99+`; the filter tabs show the true count. The badge is `aria-hidden`; the button's accessible name is `Notifications`, plus the unread count in words and the busy state (e.g. `Notifications, 3 unread, setting up`).
+- While any visible agent is starting or downloading, a **separate busy dot** shows, distinct from the count. It is not an unread notification and does not increment the count.
+- On a phone the bell lives in the top bar (one bell per screen); the page header below `lg` does not repeat it.
+- Clicking it opens the panel. The entry is visible even with no agents; it opens the empty state.
 
-**Design change**: `NavItem` gains an optional unread count and a separate busy flag; `Sidebar` gains a `notifications` prop. Stories cover expanded/collapsed × unread/busy/both.
+**Design change**: `IconButton` gains an optional count badge and a separate busy flag, and stories for count / many / count+busy. The sidebar and `NavItem` are unchanged.
 
 ## 2. Panel shell
 
@@ -59,7 +54,7 @@ A right-hand `SlideOver`, 440px wide, full height, over the current screen. On a
 - Header: `Notifications` (the dialog's accessible name) and the close control. Counts live in the filter tabs.
 - Body: live setup section, then a **sticky** filter toolbar, then the scrolling list. The list keeps its position when a notification arrives.
 - Opening the panel never marks anything read.
-- Closing returns to the same screen and restores focus to the sidebar entry.
+- Closing returns to the same screen and restores focus to the bell it was opened from.
 - Deselecting/clicking the scrim closes; Escape closes; the phone platform back should close it too (the implementation can push/pop a history entry or handle `popstate`).
 
 **Mobile**: full-screen, own header, full-width setup cards, filters wrap to a second line when needed, “Mark all read” on its own right-aligned row when it does not fit, bottom safe-area padding, row actions always visible.
@@ -150,8 +145,8 @@ Composed from `ListItem` with `shape="flush"`, `align="start"`, `action` (the ne
 
 ## 9. Accessibility
 
-- The sidebar entry is a button with an accessible name including “Notifications”, the unread count and the busy state; the tooltip in the rail says the same. The badge is not the only carrier.
-- The panel is a modal dialog named `Notifications`; focus is trapped, Escape closes, focus returns to the sidebar entry.
+- The header bell is a button with an accessible name including “Notifications”, the unread count and the busy state. The badge is not the only carrier.
+- The panel is a modal dialog named `Notifications`; focus is trapped, Escape closes, focus returns to the bell.
 - Filters are a named group (`Filter notifications`) with pressed state; counts are read with the labels.
 - The unread dot is decorative; the row's accessible name says `Unread`.
 - Failure is conveyed by wording and colour; ready uses wording; unread uses the dot and the hidden word.
@@ -162,13 +157,13 @@ Composed from `ListItem` with `shape="flush"`, `align="start"`, `action` (the ne
 
 ## 10. Test selectors and Playwright expectations
 
-- Entry: role `button`, name `/Notifications/` (expanded and in the phone drawer). The count and busy state are in the accessible name.
+- Bell: role `button`, name `/Notifications/`, in the page header (desktop) or the top bar (phone). The count and busy state are in the accessible name.
 - Panel: role `dialog`, name `Notifications`.
 - Filters: group name `Filter notifications`; buttons `All`, `Unread`, `Read` with their counts (use a regex).
 - Mark all: role `button`, name `Mark all read`.
 - Row action: `Mark as read` / `Mark as unread`.
 - Home: `getByText('Since you were away')` has count 0; the notification list contains the event text instead.
-- Phone: open menu → button Notifications → dialog is full-screen (viewport-sized) and the drawer is gone; close returns focus to the entry.
+- Phone: the top bar's bell → dialog is full-screen (viewport-sized); close returns focus to the bell.
 - e2e fixture: a unique dummyplug agent plus an MCP integration created through the API gives a deterministic `integration` notification with the test actor's name.
 
 ## 11. Component mapping
@@ -176,7 +171,7 @@ Composed from `ListItem` with `shape="flush"`, `align="start"`, `action` (the ne
 | Element | Source |
 |---|---|
 | Panel | `SlideOver` / `SlideOverPanel` |
-| Sidebar entry | `NavItem` (new count/busy) inside `Sidebar` (new prop) |
+| Header bell | `IconButton` (new count/busy) mounted by `PageFrame`/`SettingsFrame`, Home, the chat header and the phone top bar |
 | Bell | new `bell` icon in `design/src/icons/map.ts` |
 | Filters | `FilterTabs` |
 | Row | `ListItem` (new `action` slot), `Sigil`, unread gutter |

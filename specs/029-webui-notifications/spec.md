@@ -16,7 +16,7 @@ Today the only cross-agent account of what happened while a person was away is H
 
 That panel has three limits. It lives only on Home and only on wide screens, so a person on a chat, task or settings screen cannot tell that something happened. Its window is the person's previous visit, so events that happened during a long session, or before the previous visit, are invisible. And it has no memory of what the person has already looked at, so it cannot answer “is there anything I have not seen yet?”
 
-This feature turns those notable events into a per-person **notification inbox**: a Notifications entry in the app navigation, immediately above Settings, carrying an unread badge and opening a list that can be filtered to all, unread or read notifications. The “Since you were away” panel and its previous-visit boundary are replaced; the same notable events remain available from the notifications entry on every screen.
+This feature turns those notable events into a per-person **notification inbox**: a Notifications bell at the right end of every page header, carrying an unread badge and opening a list that can be filtered to all, unread or read notifications. The “Since you were away” panel and its previous-visit boundary are replaced; the same notable events remain available from the bell on every screen. The bell sits where the panel comes from — the right edge — and the sidebar stays navigation only (design amendment, 2026-10-25).
 
 Today an agent's setup — building, pulling a chat model from its provider, fetching an embedding, speech-to-text or text-to-speech model, and reaching ready or failed — is shown as a large card inside that agent's chat, and only while the person stays there. This feature also gives setup a home in the notification panel: live progress for any agent while it runs, and a durable ready or failed outcome when it ends.
 
@@ -26,7 +26,7 @@ Read state belongs to each person. Two people who can see the same agent share t
 
 ### User Story 1 - See what happened and open it from any screen (Priority: P1)
 
-A person is working on an agent's tasks page when a scheduled task fails and a background job finishes. Without leaving the page, they notice an unread count beside Notifications in the navigation, open the notification list, and see both events with the agent's name, what happened and when. Selecting the failed task takes them to that task's run; selecting the background job takes them to the conversation where its report was delivered. Both are then marked read.
+A person is working on an agent's tasks page when a scheduled task fails and a background job finishes. Without leaving the page, they notice an unread count on the bell in the page header, open the notification list, and see both events with the agent's name, what happened and when. Selecting the failed task takes them to that task's run; selecting the background job takes them to the conversation where its report was delivered. Both are then marked read.
 
 **Why this priority**: This is the feature. A notification system that cannot be reached from where the person already is, or that does not take them to the event, delivers no value.
 
@@ -34,11 +34,11 @@ A person is working on an agent's tasks page when a scheduled task fails and a b
 
 **Acceptance Scenarios**:
 
-1. **Given** a signed-in person and the app navigation, **When** any screen is shown, **Then** Notifications appears immediately above Settings with an icon, a readable label and the person's unread count for agents they may see.
+1. **Given** a signed-in person, **When** any screen is shown, **Then** the page header offers a Notifications bell with an icon, an accessible name and the person's unread count for agents they may see.
 2. **Given** the person has no unread notifications or no agent they may see, **When** the navigation renders, **Then** no unread badge is shown (not a zero).
 3. **Given** the person has unread notifications, **When** they select Notifications, **Then** a list opens without leaving the current screen, newest first, and each row shows the agent, what happened, when it happened and whether it failed.
 4. **Given** more notifications than fit one page, **When** the person chooses to load older ones, **Then** older notifications are appended in order with no duplicates and no gaps.
-5. **Given** the navigation is collapsed to icons, **When** the person views the rail, **Then** Notifications is still present with an accessible name, a visible unread indicator and the same behaviour as the expanded entry.
+5. **Given** the phone layout (a narrow window), **When** the person views the top bar, **Then** the bell is still present with an accessible name, a visible unread indicator and the same behaviour as on a wide screen.
 6. **Given** a notification row, **When** the person selects it, **Then** its destination opens and that notification becomes read.
 7. **Given** the notification list is open, **When** the person closes it, **Then** they are back where they were, with keyboard focus returned to the Notifications entry.
 
@@ -145,7 +145,7 @@ A person leaves vizier open on a chat. A background job finishes. Within half a 
 
 ### User Story 7 - Use it on a phone and with assistive technology (Priority: P3)
 
-A person on a phone opens the navigation drawer, finds Notifications above Settings, and gets the same list full-screen. A keyboard-only person can reach the entry, open the list, move through rows, read them with a screen reader, mark read/unread and close with Escape. Failure is not conveyed by colour alone.
+A person on a phone finds the bell in the top bar and gets the same list full-screen. A keyboard-only person can reach the entry, open the list, move through rows, read them with a screen reader, mark read/unread and close with Escape. Failure is not conveyed by colour alone.
 
 **Why this priority**: The feature must be usable everywhere the old Home panel was not, but basic desktop use is the primary path.
 
@@ -153,7 +153,7 @@ A person on a phone opens the navigation drawer, finds Notifications above Setti
 
 **Acceptance Scenarios**:
 
-1. **Given** a phone viewport, **When** the navigation drawer is opened, **Then** Notifications is present above Settings with its unread indicator, and selecting it opens a full-screen list with the same content and filters.
+1. **Given** a phone viewport, **When** any screen is shown, **Then** the bell is present in the top bar with its unread indicator, and selecting it opens a full-screen list with the same content and filters.
 2. **Given** keyboard-only use, **When** the person tabs to Notifications, opens it, moves through rows and closes it, **Then** every action is operable, focus is contained while open, Escape closes, and focus returns to the entry.
 3. **Given** a screen reader, **When** the entry, badge, filters, rows and actions are read, **Then** each has a meaningful name and the unread count is announced, without relying on the visual badge alone.
 4. **Given** a failed notification, **When** it is shown, **Then** its failure is conveyed by text and/or icon in addition to any colour.
@@ -197,13 +197,13 @@ A person on a phone opens the navigation drawer, finds Notifications above Setti
 
 **Entry point and presentation**
 
-- **FR-001**: The app navigation MUST offer a Notifications entry immediately above Settings on every screen where the navigation is shown, with an icon, a readable label and an accessible name.
+- **FR-001**: Every screen MUST offer a Notifications bell at the right end of its page header (the shared page frame, settings, Home, the chat header, and the phone top bar), with an icon and an accessible name.
 - **FR-002**: The entry MUST show the signed-in person's unread count for notifications they may see, hide the badge when the count is zero, and cap the displayed value while keeping the true count available in the list.
 - **FR-003**: Selecting the entry MUST open the notification list without navigating away from the current screen; closing it MUST return the person to that screen with focus restored to the entry.
 - **FR-004**: The list MUST show notifications newest first, in pages, with a way to load older ones and no duplicates or gaps across pages.
 - **FR-005**: Each notification MUST show which agent it concerns, what happened, when it happened, and whether it failed, and MUST lead to the place where the person can see more.
-- **FR-006**: The entry and its badge MUST remain usable when the navigation is collapsed to an icon rail.
-- **FR-007**: On a phone viewport the entry MUST be available in the navigation drawer and MUST open the same list full-screen.
+- **FR-006**: The bell and its badge MUST remain usable at every supported width, including the phone layout's top bar.
+- **FR-007**: On a phone viewport the bell MUST be available in the top bar and MUST open the same list full-screen.
 
 **What becomes a notification**
 

@@ -186,3 +186,7 @@ The existing away feed (`specs/024-webui-rewrite/`, `src/channels/http/api/v1/ov
 - *In-tab OS notifications via the `Notification` API*: still requires a secure context and only works while the app is open/backgrounded; a small follow-up at most, not the same as push.
 - *Adding push to 029 now*: would balloon the storage/API/UI scope and the deployment requirements (HTTPS, PWA, external push service) for a feature the spec explicitly scoped out.
 - *Email or chat delivery instead*: also external and a different product surface; no better fit for “the browser is closed”.
+
+## Amendment after implementation — the bell lives in the page header
+
+The first implementation put the Notifications entry in the sidebar footer above Settings (R6, R9). That left the entry on the left and the panel sliding in from the right: the control and the surface it opened were on opposite edges, which read as a navigation item that behaved like a corner utility. The bell now sits at the right end of every page header (the shared `PageFrame`/`SettingsFrame`, Home, the chat header, and the phone top bar) so it shares the panel's edge. The sidebar goes back to navigation only; `NavItem`/`Sidebar` are unchanged, and the count/busy states moved onto `IconButton`. The rest of R6 — a slide-over, not a route, with a 15 s poll — stands.

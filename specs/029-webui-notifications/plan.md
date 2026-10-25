@@ -6,7 +6,7 @@
 
 ## Summary
 
-Replace Home's “Since you were away” panel with a per-person **notification inbox**. A bell above Settings carries an unread count and a separate setup-activity indicator; it opens a right-hand slide-over (full-screen on phones) with **All / Unread / Read** filters, per-row read/unread actions, “Mark all read”, and 30 days of persistent notifications. Live agent setup progress (build, model/embedding/STT/TTS downloads) appears above the filters and is deliberately *not* a read/unread notification; a setup that downloaded something or recovers from a failure produces one ready notification, and any start failure produces one failure notification shared with the start-failure category. The detailed starting card leaves chat, leaving a compact queued-messages line and the existing actionable failure banner.
+Replace Home's “Since you were away” panel with a per-person **notification inbox**. A bell at the right end of every page header carries an unread count and a separate setup-activity indicator; it opens a right-hand slide-over (full-screen on phones) with **All / Unread / Read** filters, per-row read/unread actions, “Mark all read”, and 30 days of persistent notifications. Live agent setup progress (build, model/embedding/STT/TTS downloads) appears above the filters and is deliberately *not* a read/unread notification; a setup that downloaded something or recovers from a failure produces one ready notification, and any start failure produces one failure notification shared with the start-failure category. The detailed starting card leaves chat, leaving a compact queued-messages line and the existing actionable failure banner.
 
 Seven decisions carry the plan (details in [research.md](./research.md)):
 
@@ -45,7 +45,7 @@ Seven decisions carry the plan (details in [research.md](./research.md)):
 | Principle | Assessment |
 |---|---|
 | **I. Lean by default** | PASS. No new crate. No event bus, scheduler projector, or per-user fan-out. The inbox is two tables, one service and one existing panel primitive. Live progress reuses the setup poll, and channel replies reuse the existing `session_history` aggregate instead of a new background job. Retiring the feed removes code rather than adding a second source. |
-| **II. DRY via traits** | PASS. `NotificationStorage` is one storage concern implemented by `SqliteStorage` and forwarded by `VizierStorage`, following the established pattern. Wording and destinations live in one `notifications/text.rs`; the cursor in one helper. Sources call one `Notifications` service; there is no category `match` in handlers or storage. The design system additions extend existing primitives (`NavItem`, `Sidebar`, `ListItem`, `AgentStartingCard`) rather than creating parallel ones. |
+| **II. DRY via traits** | PASS. `NotificationStorage` is one storage concern implemented by `SqliteStorage` and forwarded by `VizierStorage`, following the established pattern. Wording and destinations live in one `notifications/text.rs`; the cursor in one helper. Sources call one `Notifications` service; there is no category `match` in handlers or storage. The design system additions extend existing primitives (`IconButton`, `ListItem`, `AgentStartingCard`) and the shared `PageFrame` rather than creating parallel ones. |
 | **III. Self-contained runtime** | PASS. SQLite only; no external service, queue or cache. Reads and writes need no network. Setup downloads are the existing opt-in model behaviour, not a requirement of notifications. |
 | **IV. Portability** | PASS. No OS/arch-specific code, no filesystem assumptions beyond the existing SQLite workspace, no new native dependency. |
 | **V. Unified errors & observability** | PASS. Rust paths return `crate::Result`/`anyhow::Result` per storage convention; notification creation failures are `tracing::warn!` and never propagate into the event; no `unwrap` outside tests. The projection and purge log their outcomes. |
@@ -118,8 +118,7 @@ src/
 
 design/src/
 ├── icons/map.ts                    # + Bell (lucide)
-├── components/NavItem/NavItem.tsx  # + optional badge count / busy dot
-├── components/Sidebar/Sidebar.tsx  # + notifications entry above Settings
+├── components/IconButton/IconButton.tsx # + optional count badge / busy dot
 ├── components/ListItem/ListItem.tsx# + action sibling outside the link/button
 ├── components/AgentStartingCard/AgentStartingCard.tsx
 │                                   # + downloads slot, full-width in a panel
@@ -130,6 +129,8 @@ webui/app/
 ├── api/endpoints/overview.ts       # remove feed types/getFeed
 ├── api/schema.d.ts                 # regenerated from OpenAPI
 ├── stores/notifications.ts         # panel state, counts, list, filters, read actions, polling
+├── screens/shared/NotificationsBell.tsx # the header bell (count + busy)
+├── screens/shared/PageFrame.tsx    # mounts the bell in every page header
 ├── screens/notifications/
 │   ├── NotificationsPanel.tsx      # SlideOver body: setup, filters, list, states
 │   ├── NotificationRow.tsx         # ListItem + unread gutter + mark action
@@ -137,7 +138,7 @@ webui/app/
 ├── screens/home/AwayFeed.tsx       # DELETE
 ├── screens/chat/AgentStateBanner.tsx
 │                                   # compact starting line; failure banner unchanged
-├── layouts/AppShell.tsx            # render panel, start polling, wire sidebar, close drawer
+├── layouts/AppShell.tsx            # render panel, start polling, phone top-bar bell
 ├── routes/home.tsx                 # remove the away panel and its column
 ├── lib/
 │   ├── overview.ts                 # remove feedTime
@@ -156,8 +157,7 @@ CLAUDE.md                            # storage/HTTP/WebUI notes for the new subs
 ### Phase 0 — Design system (design submodule, first)
 
 1. Add `Bell` to the icon map.
-2. Extend `NavItem` with an optional trailing count badge and a separate busy indicator that collapses to a dot on the rail; add stories for unread, busy, both and collapsed.
-3. Extend `Sidebar` with a `notifications` prop (`unread`, `busy`, `onOpen`) rendered immediately above Settings; add stories for expanded, collapsed, unread and busy.
+2. Extend `IconButton` with an optional corner count badge and a separate busy dot; add stories for count, many unread, and count+busy.
 4. Extend `ListItem` with an `action` slot rendered as a sibling of the row's link/button, so the mark-read control is never nested inside an anchor/button; add a story.
 5. Extend `AgentStartingCard` with an optional downloads slot and make it fit a panel width (`w-full max-w-324` or equivalent); add a story with several downloads.
 6. Commit the design submodule; this commit is the first of the three-part cascade.
@@ -197,7 +197,7 @@ CLAUDE.md                            # storage/HTTP/WebUI notes for the new subs
 1. `api/endpoints/notifications.ts`: types (`NotificationItem`, `NotificationCounts`, `NotificationPage`, `NotificationFilter`) and list/count/read/read-all calls.
 2. `stores/notifications.ts`: `open`, `filter`, `items`, `counts`, `next`, `loading`, `error`, `loaded`; open/close, filter change, first-page refresh + silent merge on poll, load-more, optimistic mark read/unread, mark all, count poll. `start()` polls counts every 15 s while visible and refreshes the open list; `reset()` on sign-out/mount.
 3. `screens/notifications/`: the `SlideOver` panel with the setup section (from `useAgents.setups`/`samples`, filtered to starting/downloading), sticky filter toolbar with counts and “Mark all read”, the list, `NotificationRow` (fixed unread gutter, sigil, agent name, time, failed/success text, sibling mark action), `LoadMore`, skeletons, error/empty states. Use `ListItem` with the new `action` slot; the row selects the destination and marks read.
-4. Wire `AppShell`: start the notification poll and the existing agents/setup poll; render the panel; compute `busy` from live setups; pass `{unread, busy, onOpen}` to `Sidebar`; on phone close the drawer first, then open the full-screen sheet; ensure focus returns to the entry. The entry is a button, not a route.
+4. Wire the shell: start the notification poll and the existing agents/setup poll; render the panel; mount `NotificationsBell` in `PageFrame` (and so `SettingsFrame`), Home's header, the chat header and the phone top bar; compute `busy` from live setups; make `PageFrame`/Home skip the bell below `lg` so the phone top bar is the only one. The bell is a button, not a route.
 5. Remove Home's `AwayFeed` and its right-hand column; delete the component and the `getFeed`/`Feed` client types; move `feedTime` to `lib/format.ts` and its test. Home keeps the greeting, activity panel and court.
 6. `AgentStateBanner`: replace the detailed `AgentStartingCard` with a compact line (starting, step/percent, messages queued, “View in Notifications”); keep the failed banner with Retry now / Open config and the connection banners. The panel is the only detailed setup view.
 7. Tests: `lib/notifications.test.ts` for merge/filter/count/time; store tests for optimistic read/mark-all and filter membership; typecheck; `e2e/notifications.spec.ts` (desktop + mobile): entry/badge, open, filter, mark read/unread, mark all, Home has no away section, phone drawer → full-screen, focus/escape.

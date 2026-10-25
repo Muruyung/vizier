@@ -394,6 +394,8 @@ After Phase 2:
 
 ## Run status
 
+**Design amendment (after the first pass):** the bell moved from the sidebar footer to the right end of every page header, so the entry and the right-hand panel share an edge. T002/T003 (NavItem/Sidebar count and busy) were superseded by `IconButton` count/busy and `NotificationsBell` mounted by `PageFrame`/`SettingsFrame`, Home, the chat header and the phone top bar; T020's sidebar wiring became the header wiring. `spec.md`, `plan.md` and `contracts/notifications-ui.md` describe the header bell.
+
 Everything is implemented and committed except the two checks that need dependencies this environment does not have. Both are recorded in `quickstart.md`'s "Recorded run":
 
 - **T081 (LIVE)** — the Ollama download → ready branch of §6 and the real-provider dream of §8 need Ollama/a real provider. The download-less quick restart, the download epoch, the ready/recovery rule and the dream wording are covered by Rust tests; the offline parts of §5/§6 and §1–§4, §7, §9 were run end to end against the binary.
