@@ -41,7 +41,7 @@ A person is working on an agent's tasks page when a scheduled task fails and a b
 5. **Given** the phone layout (a narrow window), **When** the person views the top bar, **Then** the bell is still present with an accessible name, a visible unread indicator and the same behaviour as on a wide screen.
 6. **Given** a notification row, **When** the person selects it, **Then** its destination opens and that notification becomes read.
 7. **Given** the notification list is open, **When** the person closes it, **Then** they are back where they were, with keyboard focus returned to the Notifications entry.
-8. **Given** a person sends a message in a WebUI conversation and leaves that screen, **When** the agent answers, **Then** one notification appears for that person (and not for anyone else who can see the agent) and opens that conversation.
+8. **Given** a person sends a message in a WebUI conversation and leaves that screen, **When** the agent answers, **Then** one notification appears for that person (and not for anyone else who can see the agent), a timed toast announces it, and either opens that conversation.
 
 ---
 
@@ -270,6 +270,7 @@ A person on a phone finds the bell in the top bar and gets the same list full-sc
 **WebUI conversations**
 
 - **FR-050**: A completed WebUI conversation reply MUST become a notification addressed to the person whose conversation it is. It MUST NOT be listed, counted or readable by anyone else who can see the agent. Discord and Telegram replies keep the hourly channel-reply aggregate and MUST NOT also produce a per-turn row.
+- **FR-051**: When a notification arrives while the list is closed, the app MUST show a timed in-app toast naming the agent and the event. Selecting it MUST mark it read and open its destination; a burst of arrivals MUST collapse to one toast that opens the list. The toast MUST dismiss itself (about 6 seconds, longer for a failure) and MUST NOT replace the row in the inbox.
 
 ### Key Entities *(include if data involved)*
 
@@ -326,4 +327,5 @@ A person on a phone finds the bell in the top bar and gets the same list full-sc
 - **Chat replies belong to one person**: a WebUI conversation is a person's own, so its notification carries that person as its audience and is invisible to other viewers of the same agent; Discord and Telegram stay agent-wide through the hourly channel reply summary. A reply is notified whether or not the person is still on the conversation screen.
 - **Desktop and phone**: the bell lives at the right end of the page header on desktop, and in the phone top bar where the header below `lg` does not repeat it. The navigation sidebar and its drawer hold navigation only. The live setup section is shown in the panel at both sizes.
 - **No notification preferences**: per-category or per-agent muting, grouping, search, per-download notifications and bulk selection are out of scope. Every eligible event notifies every person who may see it.
+- **Arrival is announced in the moment and kept in the list**: a new notification raises a timed toast (in-app only, no sound) and remains in the inbox. The toast is a nudge; the list is the record. A burst becomes one toast rather than a stack.
 - **Dependencies**: the existing notable-event sources (agent health, task runs, dream cycles, background jobs, integration changes and channel reply activity), the existing setup progress source and its download sources (agent build, chat-model pull, embedding, speech-to-text and text-to-speech), the existing agent-visibility and permission rules, and the app's design system for the navigation entry, badge, live setup, list and icons.

@@ -82,30 +82,40 @@ Shown only when at least one visible setup is `starting` or `downloading`.
 - `Mark all read` is a `TextLink`/small action at the right of the toolbar; on a narrow screen it moves below the tabs. Disabled (or hidden) when unread is 0. It applies to **all** visible unread, including pages not loaded.
 - No category filter, search or grouping in this release.
 
-## 5. Notification row
+## 5. Notification card
 
-Composed from `ListItem` with `shape="flush"`, `align="start"`, `action` (the new sibling slot), and `Sigil size="sm"`.
+One notification is a **card**: a bordered `rounded-lg` surface with the agent's sigil (`md`, 34px), its name, the time, the stored summary, and the mark-read control at the right, inside the card.
 
 ```
-[gutter] [sigil]  Scribe                       14:02   [✓]
-                  Task “Morning digest” ended without ...
+┌───────────────────────────────────────────────┐
+│ ▦ Scribe                         14:02   [✓] │
+│ Task “Morning digest” ended without ...       │
+└───────────────────────────────────────────────┘
 ```
 
-- **Gutter**: a fixed 6–8px column; unread rows show a 6px ink dot, read rows leave it empty so nothing shifts. The dot is `aria-hidden`; the row's accessible text includes a visually hidden `Unread`.
-- **Sigil**: the agent's identicon, `sm` (22px).
+- **No unread gutter or dot.** Unread is carried by the summary's tone (softer for unread, muted for read; `failed`/`success` keep their tone) and a visually hidden `Unread` in the row's accessible text. Read and unread rows therefore have the same shape and never shift when marked.
+- **Sigil**: the agent's identicon, `md` (34px).
 - **Title**: the agent's name (the agent store, falling back to `agent_id`).
-- **Meta**: `feedTime` (`14:02`, `yesterday`, `Oct 21`), mono/faint, right-aligned.
-- **Subtitle**: the stored summary, `type-ui-para`. Failure tone uses `text-failed-text`; success uses normal text (the wording says ready); default uses `text-muted`. Failure is carried by the wording and colour, never colour alone.
-- **Action**: an `IconButton` sibling, outside the row's link/button:
+- **Time**: `feedTime` (`14:02`, `yesterday`, `Oct 21`), mono/faint, right-aligned on the title line.
+- **Subtitle**: the stored summary, `type-ui-para`.
+- **Action**: an `IconButton` at the card's right, a **sibling** of the row's text button (valid HTML; a click never navigates):
   - unread → `check`, accessible name `Mark as read`
   - read → `rotate-ccw`, accessible name `Mark as unread`
-  - desktop: hidden until row hover/focus-visible; phone: always visible; at least a 40×40 hit area.
-  - Clicking it toggles read state and never navigates.
-- **Row click**: navigates to `href` and marks read. Under the Unread filter the row leaves the list after the navigation; under All its dot disappears; under Read it would not have been shown until read.
-- The row is a link or button with a name that includes the agent, the text and the time; the action is a separate control.
-- Long titles/text truncate visually; the full text stays available to assistive technology (the subtitle is not `truncate`-only; it can wrap to two lines on a phone).
+  - desktop: hidden until the card is hovered or the control focused; phone: always visible.
+- **Card click**: navigates to `href` and marks the notification read. The card is the text button; the action sits beside it inside the border.
+- Rows are stacked with an 8px gap; there are no divider lines.
+- Long summaries wrap; the full text stays available to assistive technology.
 
-**Design change**: `ListItem` gains `action?: ReactNode` rendered as a sibling of the row's interactive element, so the mark button is never nested inside an anchor/button. Story with a row action.
+**Design change**: none beyond the bell's `IconButton` count/busy; the card is built from `Sigil` and `IconButton` with the panel's own spacing. `ListItem`'s `action` slot remains the primitive for rows in other lists.
+
+## 5a. Arrival toast
+
+When the list is **closed** and the 15 s poll finds a new notification, the shell shows one **timed toast** (bottom-right, the design `Toast`):
+
+- Single arrival: the agent's name as the title and the summary as the message; clicking it marks the notification read and opens its destination. Tone follows the notification (`failed` → error, `success` → success, otherwise info).
+- A burst (several at once): one toast, `N new notifications`, whose action opens the panel.
+- It dismisses itself: about 6 s, 8 s for a failure. The inbox still holds the row; the toast is a nudge, not the record.
+- No toast while the panel is open — the row is already at the top of the list.
 
 ## 6. States
 
@@ -148,11 +158,11 @@ Composed from `ListItem` with `shape="flush"`, `align="start"`, `action` (the ne
 - The header bell is a button with an accessible name including “Notifications”, the unread count and the busy state. The badge is not the only carrier.
 - The panel is a modal dialog named `Notifications`; focus is trapped, Escape closes, focus returns to the bell.
 - Filters are a named group (`Filter notifications`) with pressed state; counts are read with the labels.
-- The unread dot is decorative; the row's accessible name says `Unread`.
-- Failure is conveyed by wording and colour; ready uses wording; unread uses the dot and the hidden word.
+- Unread is never colour-only: the row's accessible name says `Unread` and the summary's tone changes.
+- Failure is conveyed by wording and colour; ready uses wording; unread uses the summary's tone and the hidden word (no dot).
 - The setup card is `role="status"`; the progress bar has `aria-valuemin/max/now` and a label, or is indeterminate.
 - The mark action has an explicit label; its hit area is large enough on touch; it is keyboard reachable and visible on focus.
-- Empty/error states are announced (`role="alert"` for errors) and the error has a Retry button.
+- Empty/error states are announced (`role="alert"` for errors) and the error has a Retry button. A toast is `role="status"` (polite) or `role="alert"` for a failure, and auto-dismisses.
 - No horizontal scrolling at 390px; the panel and setup cards fit the viewport.
 
 ## 10. Test selectors and Playwright expectations
@@ -174,9 +184,10 @@ Composed from `ListItem` with `shape="flush"`, `align="start"`, `action` (the ne
 | Header bell | `IconButton` (new count/busy) mounted by `PageFrame`/`SettingsFrame`, Home, the chat header and the phone top bar |
 | Bell | new `bell` icon in `design/src/icons/map.ts` |
 | Filters | `FilterTabs` |
-| Row | `ListItem` (new `action` slot), `Sigil`, unread gutter |
+| Notification card | `Sigil` (md), `IconButton` action, bordered card |
 | Setup card | `AgentStartingCard` (new downloads/width), `DotLoader` |
 | Empty/loading/error | `EmptyState`, `Skeleton` |
+| Arrival toast | `Toast` (new `onSelect`), `ToastRegion` |
 | Pagination | `LoadMore` |
 | Actions | `IconButton`, `TextLink` |
 | Chat line | small text + `DotLoader` + `TextLink` |

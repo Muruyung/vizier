@@ -266,11 +266,12 @@ Expect `0` and `0` (the read rows cascade). Existing notifications for other age
 With at least one unread notification:
 
 1. On a desktop, open any screen: the page header's right end shows the bell, with the unread count as a badge and a separate dot while an agent sets up. The bell is present on every page (the shared `PageFrame`, Settings, Home and the chat header).
-2. Open it: a right-hand 440px panel over the current screen. All / Unread / Read show counts; select `Unread`, mark one read, mark another unread, then `Mark all read`; the badge clears and the list updates. Open a row: the destination opens and the row is read when you come back. Escape closes and focus returns to the entry.
-3. Home no longer contains `Since you were away` or a reserved right column; the greeting, activity grid and court use the width. Mobile Home is unchanged.
-4. At 390px, the top bar shows the same bell: it opens a full-screen sheet with the same content. The setup card is full width, the filters fit/wrap, the mark action is always visible (no hover), and closing returns to the previous screen. The panel has no horizontal scroll and clears the bottom safe area.
-5. With a screen reader, the entry announces the unread count and busy state; the dialog is named `Notifications`; each row announces the agent, unread state, text and time; the action has a label; failure is not conveyed by colour alone.
-6. Open the chat while an agent is starting: only the compact `Starting … · View in Notifications` line and the queue note are there; the detailed card is in the panel. A failed agent still has the failed banner with Retry now / Open config.
+2. Open it: a right-hand 440px panel over the current screen. All / Unread / Read show counts; select `Unread`, mark one read, mark another unread, then `Mark all read`; the badge clears and the list updates. Each row is a card with a large agent sigil, the agent and time on one line, the summary under it, and the mark-read check inside the card at the right. Open a row: the destination opens and the row is read when you come back. Escape closes and focus returns to the bell.
+3. Leave the panel closed on another screen and let an event happen (a task run, or a chat reply): a toast appears bottom-right within about 15 seconds, naming the agent and the event. Clicking it opens the destination and marks it read; it dismisses itself after about 6 seconds (8 for a failure). Several arrivals at once collapse to one `N new notifications` toast that opens the panel.
+4. Home no longer contains `Since you were away` or a reserved right column; the greeting, activity grid and court use the width. Mobile Home is unchanged.
+5. At 390px, the top bar shows the same bell: it opens a full-screen sheet with the same content. The setup card is full width, the filters fit/wrap, the mark action is always visible (no hover), and closing returns to the previous screen. The panel has no horizontal scroll and clears the bottom safe area.
+6. With a screen reader, the entry announces the unread count and busy state; the dialog is named `Notifications`; each row announces the agent, unread state, text and time; the action has a label; failure is not conveyed by colour alone.
+7. Open the chat while an agent is starting: only the compact `Starting … · View in Notifications` line and the queue note are there; the detailed card is in the panel. A failed agent still has the failed banner with Retry now / Open config.
 
 Playwright covers the same paths: `cd webui && npm run e2e -- notifications.spec.ts`. The phone project asserts the full-screen dialog and no horizontal overflow.
 
@@ -310,6 +311,8 @@ Not run here, still to be checked on a machine with the live dependencies:
 - §6 Ollama download → ready (the download branch; the quick-restart branch was checked above) needs a real model pull (LIVE).
 - §8 dream: LIVE, a real provider writes journal entries.
 - §10 browser checks and Playwright: the design/webui Playwright browser cannot start in this environment (`libnspr4.so` missing), so `npm test` was run but `npm run e2e` was not.
+
+UI refinements after the first pass (arrival toast, card rows with a larger sigil and no unread dot) are covered by the webui store tests for arrival detection and by typecheck/build; they were not visually verified here (no browser).
 
 Automated gates that did run:
 
