@@ -173,7 +173,7 @@ Clean up by deleting `dp-fail` or recreating the provider.
 Use a scratch agent on Ollama, or restart vizier after removing the model from Ollama so the boot build downloads it asynchronously.
 
 1. With the model absent (`ollama rm <model>`), restart vizier. Open Notifications on another screen.
-2. While the build runs, the sidebar shows the **activity indicator**, not an unread count for the setup. The panel's Setup section shows `Starting <name>…`, the current step, percent/bytes when known, an indeterminate bar when the size is unknown, the ETA when measurable, and one line per download; it updates about once a second. The card is not in the list and has no read action.
+2. While the build runs, the header's bell shows the **activity dot**, not an unread count for the setup. The panel's Setup section shows `Starting <name>…`, the current step, percent/bytes when known, an indeterminate bar when the size is unknown, the ETA when measurable, and one line per download; it updates about once a second. The card is not in the list and has no read action.
 3. When the download finishes, one unread `agent_setup_ready` appears: `<name> is ready.` (tone `success`), the activity indicator clears, and the Setup section disappears.
 4. Restart vizier again with the model cached. A quick restart shows live activity only and adds **no** ready notification.
 5. Break the pull (for example stop Ollama after the build starts, or use an unreachable base URL) and restart: the start-failure notification is the one from §5; the setup board does not add a second failure. The chat's compact line explains the queue; the failure banner remains.
@@ -239,14 +239,14 @@ sqlite3 "$DB" "select count(*) from notification where agent_id='dp-a';
 
 Expect `0` and `0` (the read rows cascade). Existing notifications for other agents are untouched.
 
-## 10. Home, sidebar, phone and accessibility
+## 10. Home, header bell, phone and accessibility
 
 With at least one unread notification:
 
-1. On a desktop, open any screen: the sidebar shows `Notifications` immediately above `Settings`, with the count. The collapsed rail shows the bell and a dot/count, and the tooltip names the unread count.
+1. On a desktop, open any screen: the page header's right end shows the bell, with the unread count as a badge and a separate dot while an agent sets up. The bell is present on every page (the shared `PageFrame`, Settings, Home and the chat header).
 2. Open it: a right-hand 440px panel over the current screen. All / Unread / Read show counts; select `Unread`, mark one read, mark another unread, then `Mark all read`; the badge clears and the list updates. Open a row: the destination opens and the row is read when you come back. Escape closes and focus returns to the entry.
 3. Home no longer contains `Since you were away` or a reserved right column; the greeting, activity grid and court use the width. Mobile Home is unchanged.
-4. At 390px, open the drawer → `Notifications`: a full-screen sheet with the same content. The setup card is full width, the filters fit/wrap, the mark action is always visible (no hover), and closing returns to the previous screen. The panel has no horizontal scroll and clears the bottom safe area.
+4. At 390px, the top bar shows the same bell: it opens a full-screen sheet with the same content. The setup card is full width, the filters fit/wrap, the mark action is always visible (no hover), and closing returns to the previous screen. The panel has no horizontal scroll and clears the bottom safe area.
 5. With a screen reader, the entry announces the unread count and busy state; the dialog is named `Notifications`; each row announces the agent, unread state, text and time; the action has a label; failure is not conveyed by colour alone.
 6. Open the chat while an agent is starting: only the compact `Starting … · View in Notifications` line and the queue note are there; the detailed card is in the panel. A failed agent still has the failed banner with Retry now / Open config.
 
