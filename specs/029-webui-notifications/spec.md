@@ -20,7 +20,7 @@ This feature turns those notable events into a per-person **notification inbox**
 
 Today an agent's setup — building, pulling a chat model from its provider, fetching an embedding, speech-to-text or text-to-speech model, and reaching ready or failed — is shown as a large card inside that agent's chat, and only while the person stays there. This feature also gives setup a home in the notification panel: live progress for any agent while it runs, and a durable ready or failed outcome when it ends.
 
-Read state belongs to each person. Two people who can see the same agent share the notification itself but not its read state. Notifications are in-app only: no email, chat-platform message, desktop notification or sound. Per-category preferences, muting, search and grouping are out of scope for this release.
+Read state belongs to each person. Two people who can see the same agent share the notification itself but not its read state. Notifications are in-app only: no browser/Web Push, email, chat-platform message, desktop notification or sound. Per-category preferences, muting, search and grouping are out of scope for this release.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -298,7 +298,8 @@ A person on a phone opens the navigation drawer, finds Notifications above Setti
 
 ## Assumptions
 
-- **In-app only**: notifications are shown inside the WebUI. Email, desktop push, sound, Discord/Telegram delivery and other external channels are out of scope.
+- **In-app only**: notifications are shown inside the WebUI. Email, browser/Web Push, desktop push, sound, Discord/Telegram delivery and other external channels are out of scope.
+- **Browser push deferred**: real browser push (a service worker, VAPID keys, per-device subscriptions and background delivery) is a separate delivery feature, not part of this release. It would not change this inbox: a later feature can deliver the rows this one persists. This release adds no service worker, push subscription or VAPID key storage.
 - **Global, not per-agent**: the inbox and its live setup section span every agent the person may see. They are not a per-agent page and do not change with the agent selected in the navigation.
 - **Coverage means parity plus setup**: the six existing notable-event categories remain, and an agent's setup outcome is added. New categories beyond those (for example mentions, provider changes or memory changes) are not added.
 - **Completed work only**: the old panel could mention a background job “still running”; the inbox waits until the outcome is terminal. A running task or job is not a notification. An agent's running setup is the one thing shown while still in progress, and only in the separate live setup section with no read state.

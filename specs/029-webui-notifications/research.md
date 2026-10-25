@@ -167,7 +167,7 @@ The existing away feed (`specs/024-webui-rewrite/`, `src/channels/http/api/v1/ov
 
 ## R13 — Ordering, concurrency and exactly-once
 
-**Decision**: A notification's public order is `(created_at, id)` descending; the cursor is base64 JSON of both; `event_key` is unique and inserts are `INSERT OR IGNORE`. Mark-all is `INSERT OR IGNORE … SELECT` over the current visible unread set; new rows after that snapshot stay unread. The reply projection is idempotent and serialized by SQLite writes; concurrent list/count calls may duplicate work but not rows. Agent deletion removes notifications in the same transaction as the agent; the service also refuses to insert for an agent that no longer exists.
+**Decision**: A notification's public order is `(created_at, id)` descending; the cursor is base64 JSON of both; `event_key` is unique and inserts are `INSERT OR IGNORE`. Mark-all is `INSERT OR IGNORE … SELECT` over the current visible unread set; new rows after that snapshot stay unread. The reply projection is idempotent and serialized by SQLite writes; concurrent list/count calls may duplicate work but not rows. Agent deletion removes notifications in the same `delete_agent` call; the service also refuses to insert for an agent that no longer exists.
 
 **Rationale**: Same-timestamp events (task runs closing together, setup ready at the same second) must page deterministically. The unique key is the exactly-once guard for retried transitions (job recovery, task recovery, startup sweeps). Refusing deleted agents closes the delete/insert race; the transaction still removes existing rows.
 
@@ -175,3 +175,14 @@ The existing away feed (`specs/024-webui-rewrite/`, `src/channels/http/api/v1/ov
 - *Ordering by timestamp alone*: ties page unpredictably.
 - *A process-wide creation lock*: unnecessary; SQLite serializes writes and the unique key handles duplicates.
 - *Fan-out read rows on creation*: more writes and stale permissions.
+
+## R14 — Browser push is deferred
+
+**Decision**: 029 is in-app only. It adds no service worker, no VAPID key storage, no push subscriptions and no background delivery. Browser/Web Push becomes a separate feature (for example `030-browser-push`) once this inbox lands.
+
+**Rationale**: True browser push is a delivery channel with infrastructure the app does not have yet: a service worker and PWA manifest, an HTTPS origin (service workers do not work on a plain LAN `http://192.168…` address), VAPID key generation/storage/rotation, a per-device subscription table (endpoint, `p256dh`, `auth`, user, failures/pruning), RFC 8291 payload encryption, and a sender that resolves which people may see the agent. It also needs a noise policy: pushing every answered task, dream and hourly reply is unusable, so a later feature must decide which categories push (failures, background reports, setup outcomes, or a digest) and add the preference UI the current spec deliberately omits. iOS only supports Web Push for a Home-Screen web app (16.4+), not a normal Safari tab. Because notifications are already persisted here, push is additive: a best-effort `PushDelivery::notify(&notification)` can hook after `Notifications::record` without changing the inbox, API or read state.
+
+**Alternatives rejected**:
+- *In-tab OS notifications via the `Notification` API*: still requires a secure context and only works while the app is open/backgrounded; a small follow-up at most, not the same as push.
+- *Adding push to 029 now*: would balloon the storage/API/UI scope and the deployment requirements (HTTPS, PWA, external push service) for a feature the spec explicitly scoped out.
+- *Email or chat delivery instead*: also external and a different product surface; no better fit for “the browser is closed”.

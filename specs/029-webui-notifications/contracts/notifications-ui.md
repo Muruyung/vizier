@@ -186,4 +186,4 @@ Composed from `ListItem` with `shape="flush"`, `align="start"`, `action` (the ne
 | Actions | `IconButton`, `TextLink` |
 | Chat line | small text + `DotLoader` + `TextLink` |
 
-Nothing new is added to the app's navigation routes; the panel is opened from the shell and is not a URL. This is intentional: notifications are personal, and preserving the current screen is the point of the panel.
+Nothing new is added to the app's navigation routes; the panel is opened from the shell and is not a URL. This is intentional: notifications are personal, and preserving the current screen is the point of the panel. No service worker, VAPID key or push subscription is added: browser/Web Push is a separate, deferred delivery feature (the inbox is its future source).

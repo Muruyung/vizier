@@ -25,7 +25,7 @@ Rules:
 - A notification is created only after its source transition succeeded. A failed source write creates nothing.
 - A notification write is best-effort from the source's perspective: failure is logged, not propagated.
 - The summary is plain text. The WebUI renders it as text, never HTML/Markdown.
-- The row is inserted only if the agent still exists. This closes the delete/insert race; `delete_agent` removes existing rows in the same transaction.
+- The row is inserted only if the agent still exists. This closes the delete/insert race; `delete_agent` removes existing rows in the same call (the read rows cascade).
 
 ### `NotificationCategory` → wording, tone and destination
 
