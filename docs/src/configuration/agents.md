@@ -161,7 +161,7 @@ Not counted: speech-to-text, text-to-speech, image generation, embeddings, and t
 
 Cost is estimated from the provider catalogue's prices. Models without a known price (custom providers, for now) are counted in tokens and reported as unpriced, never as `$0`.
 
-The WebUI **Usage** page shows the period's cost with its change against the previous period, an activity filter, a daily cost chart, a breakdown by activity, model or channel, the cache hit rate, what was spent on failed turns, and the ten costliest conversations with their calls one by one.
+The WebUI **Usage** page shows the period's cost with its change against the previous period, an activity filter, a daily chart you can switch between estimated cost and tokens spent, a breakdown by activity, model or channel, the cache hit rate, what was spent on failed turns, and the ten costliest conversations with their calls one by one.
 
 When upgrading, the usage each saved reply already carried is copied over once, so totals from before the upgrade don't change. Dreams, checkpoints, failed rounds and vision reads were never recorded before then, so the page marks days before the upgrade as incomplete.
 
