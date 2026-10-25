@@ -3,7 +3,10 @@ use chrono::{DateTime, TimeZone, Utc};
 
 use crate::{
     schema::{AgentId, TaskRun, TaskRunState},
-    storage::{sqlite::SqliteStorage, task_run::TaskRunStorage},
+    storage::{
+        sqlite::SqliteStorage,
+        task_run::{InterruptedRun, TaskRunStorage},
+    },
 };
 
 /// Every ordered read selects these columns in this order.
@@ -195,19 +198,23 @@ impl TaskRunStorage for SqliteStorage {
         Ok(runs)
     }
 
-    async fn interrupt_open_task_runs_except(&self, keep: &[i64]) -> Result<usize> {
+    async fn interrupt_open_task_runs_except(&self, keep: &[i64]) -> Result<Vec<InterruptedRun>> {
         let conn = self.conn.lock();
-        let ids: Vec<i64> = {
-            let mut stmt = conn.prepare("SELECT id FROM task_run WHERE state = ?1")?;
-            stmt.query_map([TaskRunState::Running.as_str()], |row| row.get(0))?
-                .collect::<rusqlite::Result<_>>()?
+        let open: Vec<(i64, String, String)> = {
+            let mut stmt =
+                conn.prepare("SELECT id, agent_id, task_slug FROM task_run WHERE state = ?1")?;
+            stmt.query_map([TaskRunState::Running.as_str()], |row| {
+                Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            })?
+            .collect::<rusqlite::Result<_>>()?
         };
-        let mut swept = 0;
-        for id in ids.into_iter().filter(|id| !keep.contains(id)) {
-            swept += conn.execute(
+        let mut swept = vec![];
+        for (id, agent_id, task_slug) in open.into_iter().filter(|(id, _, _)| !keep.contains(id)) {
+            conn.execute(
                 "UPDATE task_run SET state = ?1, finished_at = ?2 WHERE id = ?3",
                 rusqlite::params![TaskRunState::Interrupted.as_str(), Utc::now().timestamp_millis(), id],
             )?;
+            swept.push(InterruptedRun { id, agent_id, task_slug });
         }
         Ok(swept)
     }

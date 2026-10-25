@@ -80,7 +80,19 @@ pub trait BackgroundJobStorage {
     async fn open_background_jobs(&self) -> Result<Vec<BackgroundJob>>;
 
     /// The startup sweep, leaving the jobs in `keep` open: a pending turn backs them.
-    async fn interrupt_open_background_jobs_except(&self, keep: &[String]) -> Result<usize>;
+    /// Returns the jobs it closed, so each can be recorded as a notification.
+    async fn interrupt_open_background_jobs_except(
+        &self,
+        keep: &[String],
+    ) -> Result<Vec<InterruptedJob>>;
+}
+
+/// A job the startup sweep just marked `interrupted`, named for its notification.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterruptedJob {
+    pub id: String,
+    pub agent_id: AgentId,
+    pub kind: crate::schema::JobKind,
 }
 
 #[async_trait::async_trait]
@@ -154,7 +166,10 @@ impl BackgroundJobStorage for VizierStorage {
         self.0.open_background_jobs().await
     }
 
-    async fn interrupt_open_background_jobs_except(&self, keep: &[String]) -> Result<usize> {
+    async fn interrupt_open_background_jobs_except(
+        &self,
+        keep: &[String],
+    ) -> Result<Vec<InterruptedJob>> {
         self.0.interrupt_open_background_jobs_except(keep).await
     }
 

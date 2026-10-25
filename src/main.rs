@@ -23,6 +23,7 @@ mod file_manager;
 mod indexer;
 mod integrations;
 mod llm;
+mod notifications;
 mod sandbox;
 mod scheduler;
 mod schema;
@@ -41,6 +42,9 @@ mod provider_keys;
 mod provider_migration;
 mod utils;
 mod access;
+
+#[cfg(test)]
+mod tests_support;
 
 fn main() -> Result<()> {
     dotenvy::dotenv().ok();

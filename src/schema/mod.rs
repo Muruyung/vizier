@@ -7,6 +7,7 @@ mod global_config;
 mod history;
 pub mod integration;
 pub mod metrics;
+pub mod notification;
 pub mod provider;
 mod request;
 mod response;
@@ -43,6 +44,10 @@ pub use integration::{
 pub use history::{
     ClientCallOutcome, RecallOrigin, RecalledPassage, SessionHistory, SessionHistoryContent, dedupe_passages, history_entries_to_messages, message_for_model,
     messages_for_model, messages_to_history_entries, open_tool_calls, seal_tool_calls, split_at_request,
+};
+pub use notification::{
+    NotificationCategory, NotificationCounts, NotificationDraft, NotificationFilter,
+    NotificationItem, NotificationPage, NotificationTone, ReplyBatch,
 };
 pub use provider::{CustomModel, CustomProtocol, CustomProvider, ProviderCredentials, ProviderEntry};
 pub use request::{

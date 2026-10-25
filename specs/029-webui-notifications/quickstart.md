@@ -55,7 +55,13 @@ Expect `notify-mcp` and a `201`. Read the inbox:
 curl -s "${auth[@]}" "$API/notifications" | jq '.data'
 ```
 
-Expect one `category: "integration"`, `tone: "default"`, text `admin added notify-mcp.`, `href: "/dp-a/integrations/mcp"`, `read: false`, and counts `{all:1, unread:1, read:0}`. `admin` is the signed-in username; the actor name is resolved at creation, not read time.
+Expect one `category: "integration"`, `tone: "default"`, text `admin added notify-mcp.`, `href: "/dp-a/integrations/mcp"`, `read: false`, and counts with `unread` one higher than the rows that were there before the write. `admin` is the signed-in username; the actor name is resolved at creation, not read time.
+
+A brand-new workspace can also show one `agent_setup_ready` (`Dp A is ready.`) if the agent's build downloaded the default local embedding model — that is the intended ready outcome, not a duplicate. Filter by category when the count matters:
+
+```sh
+curl -s "${auth[@]}" "$API/notifications" | jq '.data.items[] | select(.category=="integration")'
+```
 
 Check the filters and the badge endpoint:
 
@@ -179,7 +185,7 @@ The offline Rust tests cover the download epoch, the ready flag and one-failure-
 The current hour must not appear; a closed hour must become exactly one notification per conversation. With `dp-a` created:
 
 ```sh
-DB=/tmp/vizier-notifications/vizier.db
+DB=/tmp/vizier-notifications/.runtime/vizier.db
 HOUR_MS=3600000
 NOW=$(date +%s%3N)
 PREV_HOUR=$(( NOW / HOUR_MS - 1 ))
@@ -256,3 +262,39 @@ cd webui && npm test && npm run typecheck && npm run e2e
 ```
 
 All must pass. Confirm the old feed is gone (`grep -r "overview/feed\|Since you were away\|AwayFeed" src webui docs` → no hits) and that a notification read/write needs no network. Delete `/tmp/vizier-notifications` when done.
+
+## Recorded run — 2026-10-25 (offline parts)
+
+Run on a `--workspace /tmp/vizier-notify-ws --port 19999` scratch install, dummyplug agent `scribe`, signed in as `ana`.
+
+| Step | Result |
+|---|---|
+| §1 integration | `201`; inbox row `{category: "integration", tone: "default", text: "ana added scribe-fs.", href: "/scribe/integrations/mcp", read: false}`; `GET /notifications/count` → `{all: 2, unread: 2, read: 0}` (the other row was `agent_setup_ready` from the embedding download during the create build, as noted above) |
+| §1 errors | unknown filter → `400 unknown filter`; malformed cursor → `400 malformed cursor`; missing `read` → `400 a read boolean is required`; bad token → `401`; unknown id → `404 notification not found` |
+| §1 paging | `limit=1` returned the newest row plus a `next`; following it returned the older row with no `next` |
+| §2 read state | `PUT {read:true}` → `{all: 2, unread: 1, read: 1}`; `filter=unread` listed only the unread row, `filter=read` only the read one; `POST /read-all` → `{all: 2, unread: 0, read: 2}` |
+| §2 persistence | killed the process, restarted it: the three rows kept their ids and `read` flags (`3` unread, `2`/`1` read), and the startup sweep added nothing |
+| §3 task run | one-time `morning-digest` fired on the next tick: `{category: "task_run", tone: "default", text: "Task “Morning digest” answered.", href: "/scribe/tasks?task=morning-digest&run=1", read: false}` |
+| §7 replies | rewound `notifications.replies_through` and inserted two Discord + one Telegram response in the previous hour: one `Replied 2 times in a Discord conversation.` and one `Replied once in a Telegram conversation.` appeared, with the conversation hrefs; a second call returned the same counts (idempotent) |
+| §4 background job | sent the quickstart's `background_subagents` call through the WebSocket dummyplug protocol; after the piece answered and the report was delivered, exactly one `{category: "background_job", text: "Background batch reported back.", href: "/scribe/chat"}` appeared (nothing while it was `running`/`reporting`) |
+| §5 start failure | deleted the custom provider `notify-custom` under agent `dp-fail` (`DELETE …?confirm=true`): one `{category: "agent_start_failure", tone: "failed", text: "Failed to start: agent failed to start: provider \"notify-custom\" is not available; pick another provider. Retrying in 2s.", href: "/dp-fail/config"}` despite the supervisor reaching `failures: 4` |
+| §5 recovery-ready | re-created the provider: the next retry came up and added exactly one `Dp Fail is ready.` (`success`); the failure count stayed 1 |
+| §6 quick restart | `POST /agents/dp-fail/restart` (no download, no failure episode): the ready count stayed 1 — a quick restart adds no notification |
+| §9(4) delete | a second agent `atlas` got `ana added atlas-fs.`; deleting it removed that row while `scribe`'s rows and read states stayed |
+
+Not run here, still to be checked on a machine with the live dependencies:
+
+- §6 Ollama download → ready (the download branch; the quick-restart branch was checked above) needs a real model pull (LIVE).
+- §8 dream: LIVE, a real provider writes journal entries.
+- §10 browser checks and Playwright: the design/webui Playwright browser cannot start in this environment (`libnspr4.so` missing), so `npm test` was run but `npm run e2e` was not.
+
+Automated gates that did run:
+
+```text
+cargo test              722 passed, 0 failed, 7 ignored
+cargo clippy --all-targets   (see the run in T082)
+cd webui && npm test    483 passed
+cd webui && npm run typecheck   clean
+cd design && npm run typecheck  clean
+cd design && npm run build-storybook  built
+```

@@ -1,6 +1,7 @@
 //! Home's data (`specs/024-webui-rewrite/contracts/http-api.md` § Overview): the counts for the
-//! greeting, the "Last 24 hours" dot grid and, in [`feed`], "Since you were away". Everything is
-//! limited to the agents the signed-in person can see.
+//! greeting and the "Last 24 hours" dot grid. Everything is limited to the agents the signed-in
+//! person can see. The old feed panel and its `/feed` endpoint are gone (spec 029); the inbox is
+//! `/api/v1/notifications`.
 
 use axum::{
     Extension, Router,
@@ -26,13 +27,10 @@ use crate::{
     usage::Pricer,
 };
 
-pub mod feed;
-
 pub fn overview() -> Router<HTTPState> {
     Router::new()
         .route("/", get(overview_counts))
         .route("/activity", get(activity))
-        .route("/feed", get(feed::feed))
 }
 
 /// The agents `user` can see, in id order.

@@ -116,6 +116,8 @@ impl AgentStorage for SqliteStorage {
         )?;
         // Secret values and their change log never outlive their agent (spec 027 FR-005).
         super::secret::delete_agent_secrets(&conn, agent_id)?;
+        // Its notifications go with it; their read rows cascade (spec 029).
+        super::notification::delete_agent_notifications(&conn, agent_id)?;
         conn.execute(
             "DELETE FROM session_turn WHERE agent_id = ?1",
             rusqlite::params![agent_id],

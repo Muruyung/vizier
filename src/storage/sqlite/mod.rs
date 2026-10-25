@@ -15,13 +15,13 @@ mod catalogue;
 mod client_call;
 pub(crate) mod core_revision;
 mod dream_journal;
-mod feed;
 mod global_config;
 mod history;
 mod integration;
 mod media_catalogue;
 mod memory;
 pub(crate) mod memory_revision;
+mod notification;
 mod provider;
 mod reaction;
 mod scratch;
@@ -391,9 +391,45 @@ impl SqliteStorage {
         init_turn_schema(conn)?;
         init_secret_schema(conn)?;
         init_media_catalogue_schema(conn)?;
+        init_notification_schema(conn)?;
 
         Ok(())
     }
+}
+
+/// The notification inbox (spec 029): one row per notable event, and one read row per person
+/// who has read it. New tables, so no migration; `notification_read` cascades with its
+/// notification. Split out like [`init_scratch_schema`] so the tests in
+/// `src/storage/sqlite/notification.rs` can stand them up against an in-memory connection.
+pub fn init_notification_schema(conn: &Connection) -> Result<()> {
+    conn.execute_batch(
+        "
+        CREATE TABLE IF NOT EXISTS notification (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_key   TEXT NOT NULL UNIQUE,
+            agent_id    TEXT NOT NULL,
+            category    TEXT NOT NULL,
+            tone        TEXT NOT NULL,
+            summary     TEXT NOT NULL,
+            href        TEXT NOT NULL,
+            created_at  INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_notification_created
+            ON notification(created_at DESC, id DESC);
+
+        CREATE INDEX IF NOT EXISTS idx_notification_agent_created
+            ON notification(agent_id, created_at DESC, id DESC);
+
+        CREATE TABLE IF NOT EXISTS notification_read (
+            user_id         TEXT NOT NULL,
+            notification_id INTEGER NOT NULL REFERENCES notification(id) ON DELETE CASCADE,
+            read_at         INTEGER NOT NULL,
+            PRIMARY KEY (user_id, notification_id)
+        );
+        ",
+    )?;
+    Ok(())
 }
 
 /// The `agent_secret` and `agent_secret_event` tables (`specs/027-agent-secrets/data-model.md`

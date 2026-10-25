@@ -17,6 +17,7 @@ pub mod catalogue;
 pub mod embedding;
 pub mod files;
 pub mod integrations;
+pub mod notifications;
 pub mod overview;
 pub mod providers;
 pub mod skill_support;
@@ -148,6 +149,10 @@ pub fn v1(state: HTTPState) -> Router<HTTPState> {
             agents().layer(middleware::from_fn_with_state(state.clone(), require_auth)),
         )
         .nest("/integrations", integrations::integrations(state.clone()))
+        .nest(
+            "/notifications",
+            notifications::notifications().layer(middleware::from_fn_with_state(state.clone(), require_auth)),
+        )
         .nest(
             "/overview",
             overview::overview().layer(middleware::from_fn_with_state(state.clone(), require_auth)),

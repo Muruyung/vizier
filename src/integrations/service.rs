@@ -233,6 +233,19 @@ pub async fn create(
         .save_integration(&integration, Some(agent_id), &[actor.draft(EventAction::Created)])
         .await
         .map_err(ServiceError::from_storage)?;
+    let at = Utc::now();
+    deps.notifications
+        .integration_event(
+            &integration.id,
+            &integration.name,
+            integration.family,
+            &actor.requester(),
+            EventAction::Created,
+            0,
+            &affected,
+            at,
+        )
+        .await;
     publish(&deps.transport, &integration, affected);
     integration.agents = vec![agent_id.to_string()];
     Ok(integration)
@@ -311,6 +324,21 @@ pub async fn update(
         .save_integration(&integration, None, &events)
         .await
         .map_err(ServiceError::from_storage)?;
+    let at = Utc::now();
+    for (ordinal, event) in events.iter().enumerate() {
+        deps.notifications
+            .integration_event(
+                &integration.id,
+                &integration.name,
+                integration.family,
+                &actor.requester(),
+                event.action,
+                ordinal,
+                &affected,
+                at,
+            )
+            .await;
+    }
     publish(&deps.transport, &integration, affected.clone());
     Ok((integration, affected))
 }
@@ -330,18 +358,35 @@ pub async fn delete(
     {
         return Err(ServiceError::NotFound);
     }
-    let affected = match from_agent {
-        Some(agent_id) if integration.agents.len() > 1 => deps
-            .storage
-            .unlink(id, agent_id, &actor.draft(EventAction::Unlinked))
-            .await
-            .map_err(ServiceError::from_storage)?,
-        _ => deps
-            .storage
-            .delete_integration(id, &actor.draft(EventAction::Deleted))
-            .await
-            .map_err(ServiceError::from_storage)?,
+    let (action, affected) = match from_agent {
+        Some(agent_id) if integration.agents.len() > 1 => (
+            EventAction::Unlinked,
+            deps.storage
+                .unlink(id, agent_id, &actor.draft(EventAction::Unlinked))
+                .await
+                .map_err(ServiceError::from_storage)?,
+        ),
+        _ => (
+            EventAction::Deleted,
+            deps.storage
+                .delete_integration(id, &actor.draft(EventAction::Deleted))
+                .await
+                .map_err(ServiceError::from_storage)?,
+        ),
     };
+    let at = Utc::now();
+    deps.notifications
+        .integration_event(
+            &integration.id,
+            &integration.name,
+            integration.family,
+            &actor.requester(),
+            action,
+            0,
+            &affected,
+            at,
+        )
+        .await;
     publish(&deps.transport, &integration, affected.clone());
     Ok(affected)
 }
@@ -369,6 +414,15 @@ pub async fn set_grants(
             .await
             .map_err(ServiceError::Storage)?;
         if changed {
+            deps.notifications
+                .integration_grant(
+                    agent_id,
+                    *family,
+                    *on,
+                    &Requester::User(caller.user_id.to_string()),
+                    Utc::now(),
+                )
+                .await;
             deps.transport.publish_integration_change(IntegrationChanged {
                 integration_id: String::new(),
                 family: *family,

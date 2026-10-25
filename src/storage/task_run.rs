@@ -9,9 +9,17 @@ use crate::{
     storage::{VizierStorage, history::HistoryStorage},
 };
 
+/// A run the startup sweep just closed with `Interrupted`, named so the notification that
+/// records it does not need the row any more.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InterruptedRun {
+    pub id: i64,
+    pub agent_id: AgentId,
+    pub task_slug: String,
+}
+
 #[async_trait::async_trait]
-pub trait TaskRunStorage {
-    /// Open a run. Called before the agent starts, so a run that dies with the
+pub trait TaskRunStorage {    /// Open a run. Called before the agent starts, so a run that dies with the
     /// process is still accounted for.
     async fn open_task_run(
         &self,
@@ -59,7 +67,8 @@ pub trait TaskRunStorage {
     async fn open_task_runs(&self) -> Result<Vec<TaskRun>>;
 
     /// The startup sweep, leaving the runs in `keep` (by id) open: a pending turn backs them.
-    async fn interrupt_open_task_runs_except(&self, keep: &[i64]) -> Result<usize>;
+    /// Returns the runs it closed, so each can be recorded as a notification.
+    async fn interrupt_open_task_runs_except(&self, keep: &[i64]) -> Result<Vec<InterruptedRun>>;
 
     /// Called from task deletion: a new task reusing a freed slug must find no rows.
     async fn delete_task_runs(&self, agent_id: AgentId, task_slug: String) -> Result<()>;
@@ -126,7 +135,7 @@ impl TaskRunStorage for VizierStorage {
         self.0.open_task_runs().await
     }
 
-    async fn interrupt_open_task_runs_except(&self, keep: &[i64]) -> Result<usize> {
+    async fn interrupt_open_task_runs_except(&self, keep: &[i64]) -> Result<Vec<InterruptedRun>> {
         self.0.interrupt_open_task_runs_except(keep).await
     }
 

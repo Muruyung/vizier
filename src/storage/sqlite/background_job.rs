@@ -9,7 +9,10 @@ use crate::{
         AgentId, BackgroundJob, BackgroundPiece, Canceller, JobKind, JobState, PieceState,
         TopicId, VizierChannelId, VizierSession,
     },
-    storage::{background_job::BackgroundJobStorage, sqlite::SqliteStorage},
+    storage::{
+        background_job::{BackgroundJobStorage, InterruptedJob},
+        sqlite::SqliteStorage,
+    },
 };
 
 /// Every job read selects these columns in this order.
@@ -335,25 +338,37 @@ impl BackgroundJobStorage for SqliteStorage {
         load_jobs(&conn, IN_FLIGHT, &[])
     }
 
-    async fn interrupt_open_background_jobs_except(&self, keep: &[String]) -> Result<usize> {
+    async fn interrupt_open_background_jobs_except(
+        &self,
+        keep: &[String],
+    ) -> Result<Vec<InterruptedJob>> {
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
         let now = Utc::now().timestamp_millis();
-        let open: Vec<String> = {
-            let mut stmt = tx.prepare(&format!("SELECT id FROM background_job WHERE {IN_FLIGHT}"))?;
-            stmt.query_map([], |row| row.get(0))?.collect::<rusqlite::Result<_>>()?
+        let open: Vec<(String, String, String)> = {
+            let mut stmt =
+                tx.prepare(&format!("SELECT id, origin_agent, kind FROM background_job WHERE {IN_FLIGHT}"))?;
+            stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))?
+                .collect::<rusqlite::Result<_>>()?
         };
-        let mut swept = 0;
-        for id in open.iter().filter(|id| !keep.contains(id)) {
+        let mut swept = vec![];
+        for (id, origin_agent, kind) in open.iter().filter(|(id, _, _)| !keep.contains(id)) {
             tx.execute(
                 "UPDATE background_piece SET state = 'interrupted', finished_at = ?1 \
                  WHERE job_id = ?2 AND state = 'running'",
                 rusqlite::params![now, id],
             )?;
-            swept += tx.execute(
+            tx.execute(
                 "UPDATE background_job SET state = 'interrupted', finished_at = ?1 WHERE id = ?2",
                 rusqlite::params![now, id],
             )?;
+            if let Some(kind) = crate::schema::JobKind::from_str(kind) {
+                swept.push(InterruptedJob {
+                    id: id.clone(),
+                    agent_id: origin_agent.clone(),
+                    kind,
+                });
+            }
         }
         tx.commit()?;
         Ok(swept)

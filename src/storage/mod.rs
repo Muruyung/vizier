@@ -17,7 +17,7 @@ use crate::{
         provider::{CustomProviderStorage, ProviderStorage}, reaction::ReactionStorage, scratch::ScratchStorage, turn::TurnStorage, session::SessionStorage, session_file::SessionFileStorage,
         secret::SecretStorage,
         state::StateStorage, task::TaskStorage, task_run::TaskRunStorage,
-        usage::UsageStorage, user::UserStorage, feed::FeedStorage,
+        usage::UsageStorage, user::UserStorage, notification::NotificationStorage,
     },
 };
 
@@ -25,7 +25,6 @@ pub mod agent;
 pub mod background_job;
 pub mod catalogue;
 pub mod chunk;
-pub mod feed;
 pub mod client_call;
 pub mod diff;
 pub mod document;
@@ -37,6 +36,7 @@ pub mod integration;
 pub mod media_catalogue;
 pub mod memory;
 pub mod memory_bundle;
+pub mod notification;
 pub mod provider;
 pub mod reaction;
 pub mod rerank;
@@ -76,11 +76,11 @@ where
         + ReactionStorage
         + IntegrationStorage
         + UsageStorage
-        + FeedStorage
         + ClientCallStorage
         + ScratchStorage
         + TurnStorage
-        + SecretStorage,
+        + SecretStorage
+        + NotificationStorage,
 {
 }
 

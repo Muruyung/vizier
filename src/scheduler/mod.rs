@@ -54,6 +54,18 @@ impl VizierScheduler {
                 };
                 if let Err(e) = deps.storage.close_task_run(run.id, state, Utc::now()).await {
                     tracing::error!("Failed to record the end of a run of task '{}': {}", run.task_slug, e);
+                } else {
+                    // A resumed run that has now ended is news, as any other run's end is.
+                    let title = deps
+                        .storage
+                        .get_task(run.agent_id.clone(), run.task_slug.clone())
+                        .await
+                        .ok()
+                        .flatten()
+                        .map_or_else(|| run.task_slug.clone(), |task| task.title);
+                    deps.notifications
+                        .task_run_ended(&run.agent_id, &run.task_slug, &title, run.id, state, Utc::now())
+                        .await;
                 }
             });
         }
@@ -63,6 +75,8 @@ impl VizierScheduler {
         self.recover().await;
         let mut schedules: HashMap<(DateTime<Utc>, String), Task> = HashMap::new();
         let mut interval = tokio::time::interval(Duration::from_mins(1));
+        // Startup already purged, so the first daily purge is a day from now.
+        let mut last_purge = Utc::now();
 
         loop {
             tokio::select! {
@@ -74,6 +88,17 @@ impl VizierScheduler {
                     // Dream cron scheduling
                     if let Err(e) = self.dream_scheduler.tick().await {
                         tracing::error!("Dream scheduler error: {}", e);
+                    }
+                    // Notification retention (spec 029): once a day from this tick.
+                    if Utc::now() - last_purge >= chrono::Duration::days(1) {
+                        last_purge = Utc::now();
+                        let cutoff = Utc::now()
+                            - chrono::Duration::days(crate::storage::notification::RETENTION_DAYS);
+                        match self.deps.notifications.purge_before(cutoff).await {
+                            Ok(0) => {}
+                            Ok(purged) => tracing::info!("purged {} notification(s) past retention", purged),
+                            Err(e) => tracing::warn!("failed to purge old notifications: {}", e),
+                        }
                     }
                 }
                 cmd = self.deps.transport.recv_dream_command() => {
@@ -218,6 +243,7 @@ impl VizierScheduler {
     async fn fire(&self, task: Task, now: DateTime<Utc>) {
         let task_slug = task.slug.clone();
         let agent_id = task.agent_id.clone();
+        let title = task.title.clone();
 
         if let &TaskSchedule::OneTimeTask(_) = &task.schedule {
             // Deactivated, not deleted. Deleting it before dispatch is what left nothing to
@@ -302,7 +328,7 @@ impl VizierScheduler {
             // "agent unreachable" case: the run opens and closes in the same tick, so the
             // firing is visible rather than silently absent.
             tracing::error!("Failed to send request for task '{}': {}", task_slug, e);
-            self.close_run(run_id, &task_slug, TaskRunState::NoResponse)
+            self.close_run(run_id, &agent_id, &task_slug, &title, TaskRunState::NoResponse)
                 .await;
             return;
         }
@@ -341,11 +367,22 @@ impl VizierScheduler {
                     task_slug,
                     e
                 );
+            } else {
+                deps.notifications
+                    .task_run_ended(&agent_id, &task_slug, &title, run_id, state, Utc::now())
+                    .await;
             }
         });
     }
 
-    async fn close_run(&self, run_id: Option<i64>, task_slug: &str, state: TaskRunState) {
+    async fn close_run(
+        &self,
+        run_id: Option<i64>,
+        agent_id: &str,
+        task_slug: &str,
+        title: &str,
+        state: TaskRunState,
+    ) {
         let Some(run_id) = run_id else {
             return;
         };
@@ -360,6 +397,11 @@ impl VizierScheduler {
                 task_slug,
                 e
             );
+        } else {
+            self.deps
+                .notifications
+                .task_run_ended(agent_id, task_slug, title, run_id, state, Utc::now())
+                .await;
         }
     }
 }

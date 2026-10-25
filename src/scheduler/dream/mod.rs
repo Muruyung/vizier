@@ -262,6 +262,17 @@ impl DreamScheduler {
                 }
             }
 
+            // A cycle that journaled something is news; a cycle that wrote nothing is not.
+            let entries = deps
+                .storage
+                .list_dream_entries_by_cycle(agent_id.clone(), &cycle_id, None)
+                .await
+                .map(|entries| entries.len() as u64)
+                .unwrap_or(0);
+            deps.notifications
+                .dream_ended(&agent_id, &cycle_id, entries, Utc::now())
+                .await;
+
             // Set status → Idle
             let _ = deps
                 .storage

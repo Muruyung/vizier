@@ -65,6 +65,10 @@ pub struct DownloadStatus {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, utoipa::ToSchema)]
 pub struct SetupState {
     pub agent_id: String,
+    /// The agent's display name from the build's config; a create build is not in the agent
+    /// store yet, so the panel cannot always resolve it.
+    #[serde(default)]
+    pub name: String,
     pub phase: SetupPhase,
     pub message: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -86,11 +90,16 @@ pub struct SetupStates {
 
 #[derive(Clone)]
 struct Entry {
+    name: String,
     phase: SetupPhase,
     message: String,
     error: Option<String>,
     downloads: Vec<DownloadStatus>,
     owner_id: Option<String>,
+    /// How many downloads this agent has started since the process began. Monotonic, so a
+    /// build compares it before and after itself to learn whether *it* downloaded anything; an
+    /// overlapping build keeps advancing it, which is right — the agent did download.
+    download_epoch: u64,
     /// How many builds are running for this agent (a create build and a supervisor
     /// retry can overlap). The setup only goes terminal when this reaches zero.
     active_builds: u32,
@@ -101,11 +110,13 @@ struct Entry {
 impl Default for Entry {
     fn default() -> Self {
         Self {
+            name: String::new(),
             phase: SetupPhase::Starting,
             message: String::new(),
             error: None,
             downloads: Vec::new(),
             owner_id: None,
+            download_epoch: 0,
             active_builds: 0,
             terminal_at: None,
         }
@@ -141,10 +152,17 @@ fn upsert(downloads: &mut Vec<DownloadStatus>, kind: DownloadKind) -> &mut Downl
 pub struct BuildGuard {
     board: SetupBoard,
     agent_id: String,
+    /// The download epoch when this build started.
+    start_epoch: u64,
     done: bool,
 }
 
 impl BuildGuard {
+    /// Whether this build started at least one download.
+    pub fn downloaded(&self) -> bool {
+        self.board.download_epoch(&self.agent_id) > self.start_epoch
+    }
+
     pub fn finished(mut self) {
         self.done = true;
         self.board.build_finished(&self.agent_id);
@@ -173,15 +191,21 @@ impl SetupBoard {
 
     /// A build for `agent_id` has started. The first one resets its entry; one that overlaps
     /// a build already running only joins it, so it cannot wipe that build's downloads.
-    /// `owner_id` is the config's owner (see [`SetupState::owner_id`]).
+    /// `name` is the agent's display name from the config being built. `owner_id` is the
+    /// config's owner (see [`SetupState::owner_id`]).
     pub fn build_started(
         &self,
         agent_id: &str,
+        name: impl Into<String>,
         owner_id: Option<String>,
         message: impl Into<String>,
     ) -> BuildGuard {
-        self.with(|map| {
+        let name = name.into();
+        let start_epoch = self.with(|map| {
             let entry = map.entry(agent_id.to_string()).or_default();
+            if !name.is_empty() {
+                entry.name = name;
+            }
             if owner_id.is_some() {
                 entry.owner_id = owner_id;
             }
@@ -193,12 +217,23 @@ impl SetupBoard {
                 entry.terminal_at = None;
             }
             entry.active_builds += 1;
+            entry.download_epoch
         });
         BuildGuard {
             board: self.clone(),
             agent_id: agent_id.to_string(),
+            start_epoch,
             done: false,
         }
+    }
+
+    /// How many downloads this agent has started; a build compares this before and after.
+    pub fn download_epoch(&self, agent_id: &str) -> u64 {
+        self.with(|map| {
+            map.get(agent_id)
+                .map(|entry| entry.download_epoch)
+                .unwrap_or(0)
+        })
     }
 
     /// A build finished and the agent is up.
@@ -235,6 +270,7 @@ impl SetupBoard {
         let label = label.into();
         self.with(|map| {
             let entry = map.entry(agent_id.to_string()).or_default();
+            entry.download_epoch += 1;
             entry.phase = SetupPhase::Downloading;
             entry.message = label.clone();
             entry.error = None;
@@ -323,6 +359,7 @@ impl SetupBoard {
                 .iter()
                 .map(|(agent_id, entry)| SetupState {
                     agent_id: agent_id.clone(),
+                    name: entry.name.clone(),
                     phase: entry.phase,
                     message: entry.message.clone(),
                     error: entry.error.clone(),
@@ -343,19 +380,20 @@ mod tests {
     #[test]
     fn a_dropped_build_reports_failure() {
         let board = SetupBoard::default();
-        let guard = board.build_started("a", None, "Building");
+        let guard = board.build_started("a", "Atlas", None, "Building");
         drop(guard);
         let setups = board.snapshot();
         assert_eq!(setups.len(), 1);
         assert_eq!(setups[0].phase, SetupPhase::Failed);
+        assert_eq!(setups[0].name, "Atlas");
     }
 
     #[test]
     fn an_overlapping_build_keeps_the_running_downloads() {
         let board = SetupBoard::default();
-        let first = board.build_started("a", None, "Building");
+        let first = board.build_started("a", "Atlas", None, "Building");
         board.download_started("a", DownloadKind::Model, "llama");
-        let second = board.build_started("a", None, "Building again");
+        let second = board.build_started("a", "Atlas", None, "Building again");
         assert_eq!(board.snapshot()[0].downloads.len(), 1);
 
         second.failed("boom");
@@ -363,5 +401,23 @@ mod tests {
         board.download_finished("a", DownloadKind::Model);
         first.finished();
         assert_eq!(board.snapshot()[0].phase, SetupPhase::Ready);
+    }
+
+    #[test]
+    fn the_download_epoch_says_whether_this_build_downloaded_anything() {
+        let board = SetupBoard::default();
+        let empty = board.build_started("a", "Atlas", None, "Building");
+        assert!(!empty.downloaded());
+        empty.finished();
+
+        let downloading = board.build_started("a", "Atlas", None, "Building");
+        board.download_started("a", DownloadKind::Model, "llama");
+        assert!(downloading.downloaded());
+        downloading.finished();
+
+        // A later, download-less restart is not counted as a download.
+        let quick = board.build_started("a", "Atlas", None, "Building");
+        assert!(!quick.downloaded());
+        quick.finished();
     }
 }

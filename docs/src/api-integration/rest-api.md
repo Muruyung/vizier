@@ -187,7 +187,7 @@ Use the returned `url` as `{ "local": url }` in an attachment, or reference file
 |--------|------|-------------|
 | `GET` | `/embedding-models/local` | The fastembed model list with size profiles |
 
-## Home: overview, activity and feed
+## Home: overview and activity
 
 Limited to the agents the signed-in person can see. `tz` is the person's UTC offset (`+07:00`); encode the `+` as `%2B`.
 
@@ -195,9 +195,22 @@ Limited to the agents the signed-in person can see. `tz` is the person's UTC off
 |--------|------|-------------|
 | `GET` | `/overview?tz=` | `{ agents: { total, live, failed }, cost_today_usd, accounting_since }`. Cost is priced from the catalogue; models without a price add nothing |
 | `GET` | `/overview/activity?rank=most_active\|mine\|live\|failed` | The last 24 hours: `hours` (24 hour starts, oldest first), `rows` (at most 6) of `{ agent_id, label, turns[24], live }`, an `all` row when there are 7 or more agents, `agent_total`, and `today_by_kind` when there is exactly one agent |
-| `GET` | `/overview/feed?before=&limit=` | "Since you were away": events since the person's previous visit (else 24 hours), newest first, `limit` 1–50 (default 20), `next` is the cursor for `before`. Start failures are pinned to the top of the first page |
+The Home page no longer carries a "Since you were away" feed: the notification inbox replaces it (see below).
 
-A visit is a run of requests with a JWT, with no gap over 30 minutes; API-key requests are never visits.
+## Notifications
+
+In-app notifications, stored once per event and filtered by the agents the signed-in person can see. Read state is per person; unread is the absence of a read row. Everything is retained for 30 days.
+
+| Method | Path | Description |
+|--------|------|-------------|
+| `GET` | `/notifications?filter=all\|unread\|read&before=&limit=` | Newest first: `items` of `{ id, at, agent_id, category, tone, text, href, read }`, `counts: { all, unread, read }` for the whole visible retained set (independent of `filter`), and `next` (the cursor for `before`, absent on the last page). `limit` 1–50 (default 20) |
+| `GET` | `/notifications/count` | `{ all, unread, read }`, the badge's poll target. Keep the last known counts on failure: never treat it as zero |
+| `PUT` | `/notifications/{id}/read` | `{ "read": true }` marks read, `false` marks unread. Returns the new counts. `400` for a missing/non-boolean body, `404` when the id is missing, invisible, deleted or expired |
+| `POST` | `/notifications/read-all` | Marks every visible unread notification read (including pages not loaded) and returns the counts |
+
+Categories are `agent_start_failure`, `agent_setup_ready`, `task_run`, `dream_cycle`, `background_job`, `integration` and `channel_replies`; `tone` is `default`, `failed` or `success`. `text` is plain text built from stored facts; render it as text, never HTML or Markdown. Notifications come from the event itself (a completed task run, dream cycle, background job, integration write, or an agent's ready/start-failure outcome) and from a closed-hour projection of Discord/Telegram replies. Live setup progress is not a notification: it is `GET /utils/setup-state`, whose entries now also carry the agent's `name`.
+
+`GET /api/v1/overview/feed` was **removed** by this change (pre-1.0, deliberate): use `/notifications`.
 
 ## Conversations
 

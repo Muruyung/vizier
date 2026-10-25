@@ -44,10 +44,27 @@ pub(crate) fn restart_delay(failures: u32) -> Duration {
         .min(RESTART_MAX)
 }
 
+/// A ready notification is worth recording when this build downloaded something, or the
+/// supervisor is recovering from a failure episode. A download-less quick restart (a config
+/// save, an update) is only live setup, never inbox noise.
+fn records_ready(setup_downloaded: bool, failures: u32) -> bool {
+    setup_downloaded || failures > 0
+}
+
+/// A failure opens a notification episode only when none is open and the stop was not asked
+/// for by delete or shutdown. Retries reuse the episode; a requested stop is not news.
+fn opens_failure_episode(episode_open: bool, deleting: bool, shut_down: bool) -> bool {
+    !episode_open && !deleting && !shut_down
+}
+
 /// What it takes to run an agent, built before anything already running is stopped.
 pub struct BuiltAgent {
     agent: Arc<VizierAgent>,
     indexer: Option<VizierIndexer>,
+    /// One id per build; keys its ready notification.
+    pub build_id: String,
+    /// Whether this build started at least one model/embedding/voice download.
+    pub setup_downloaded: bool,
 }
 
 impl BuiltAgent {
@@ -62,13 +79,12 @@ impl BuiltAgent {
         agent_id: &AgentId,
         config: &AgentConfig,
     ) -> Result<Self> {
-        let guard = deps
-            .setup
-            .build_started(
-                agent_id,
-                config.owner_id.clone(),
-                format!("Building agent '{}'", config.name),
-            );
+        let guard = deps.setup.build_started(
+            agent_id,
+            config.name.clone(),
+            config.owner_id.clone(),
+            format!("Building agent '{}'", config.name),
+        );
         let result = Self::build_quietly(deps, agent_id, config).await;
         match &result {
             Ok(_) => guard.finished(),
@@ -85,6 +101,24 @@ impl BuiltAgent {
         agent_id: &AgentId,
         config: &AgentConfig,
     ) -> Result<Self> {
+        let build_id = uuid::Uuid::new_v4().to_string();
+        let before = deps.setup.download_epoch(agent_id);
+        let (agent, indexer) = Self::assemble(deps, agent_id, config).await?;
+        let setup_downloaded = deps.setup.download_epoch(agent_id) > before;
+        Ok(Self {
+            agent,
+            indexer,
+            build_id,
+            setup_downloaded,
+        })
+    }
+
+    /// The parts a build produces, with no setup bookkeeping of its own.
+    async fn assemble(
+        deps: &VizierDependencies,
+        agent_id: &AgentId,
+        config: &AgentConfig,
+    ) -> Result<(Arc<VizierAgent>, Option<VizierIndexer>)> {
         if config.provider == ProviderId::OLLAMA {
             // The `ollama` built-in's base URL: saved, `OLLAMA_BASE_URL`, or the default.
             let resolved = crate::llm::resolve::resolve(
@@ -106,7 +140,7 @@ impl BuiltAgent {
 
         let indexer = build_indexer(deps, agent_id, config).await?;
         let agent = Arc::new(VizierAgent::new(agent_id.clone(), deps, config, indexer.clone()).await?);
-        Ok(Self { agent, indexer })
+        Ok((agent, indexer))
     }
 }
 
@@ -192,6 +226,9 @@ impl Supervisor {
     /// `prebuilt` is used for the first run, so an update can build before it swaps.
     pub async fn run(mut self, mut prebuilt: Option<BuiltAgent>) {
         let mut failures: u32 = 0;
+        // The failure episode a start-failure notification belongs to: opened at the first
+        // failure after a successful start, reused by retries, cleared on a successful start.
+        let mut failure_episode: Option<String> = None;
         loop {
             let built = match prebuilt.take() {
                 Some(built) => Ok(built),
@@ -234,6 +271,20 @@ impl Supervisor {
                             ..Default::default()
                         }
                     });
+                    // After the agent is Running: a build that downloaded something, or a
+                    // retry that recovered from a failure, closes the loop for the person.
+                    if records_ready(built.setup_downloaded, failures) {
+                        self.deps
+                            .notifications
+                            .agent_ready(
+                                &self.agent_id,
+                                &built.build_id,
+                                &self.config.name,
+                                Utc::now(),
+                            )
+                            .await;
+                    }
+                    failure_episode = None;
                     let started = Instant::now();
                     match self.run_once(built).await {
                         Ok(()) => break,
@@ -268,6 +319,27 @@ impl Supervisor {
                 }
             });
 
+            // One notification per failure episode. A retry that keeps failing is the same
+            // episode; a successful start cleared it, so a later failure is a new one.
+            if opens_failure_episode(
+                failure_episode.is_some(),
+                self.deleting.load(std::sync::atomic::Ordering::SeqCst),
+                self.is_shut_down(),
+            ) {
+                let episode = uuid::Uuid::new_v4().to_string();
+                self.deps
+                    .notifications
+                    .agent_start_failed(
+                        &self.agent_id,
+                        &episode,
+                        &error,
+                        Some(wait.as_secs() as i64),
+                        Utc::now(),
+                    )
+                    .await;
+                failure_episode = Some(episode);
+            }
+
             if !self.wait_to_retry(wait, &error).await {
                 break;
             }
@@ -278,7 +350,7 @@ impl Supervisor {
     /// Serve requests with a built agent until it stops. `Ok` is a requested stop (shutdown,
     /// or the request channel closed by a delete); `Err` is anything else, a panic included.
     async fn run_once(&mut self, built: BuiltAgent) -> Result<()> {
-        let BuiltAgent { agent, indexer } = built;
+        let BuiltAgent { agent, indexer, .. } = built;
         let memory_ops = self.start_memory_ops(indexer.as_ref()).await;
 
         *self.current.write().unwrap_or_else(|p| p.into_inner()) = Some(agent.clone());
@@ -436,5 +508,25 @@ async fn reject(envelope: VizierRequestEnvelope, error: &str) {
                 ..Default::default()
             })
             .await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_ready_notification_needs_a_download_or_a_recovery() {
+        assert!(!records_ready(false, 0), "a download-less quick restart is silent");
+        assert!(records_ready(true, 0), "a build that downloaded something is news");
+        assert!(records_ready(false, 2), "recovering from a failure closes the loop");
+    }
+
+    #[test]
+    fn one_failure_episode_per_streak_and_never_for_a_requested_stop() {
+        assert!(opens_failure_episode(false, false, false));
+        assert!(!opens_failure_episode(true, false, false), "a retry reuses the episode");
+        assert!(!opens_failure_episode(false, true, false), "delete is not news");
+        assert!(!opens_failure_episode(false, false, true), "shutdown is not news");
     }
 }

@@ -178,6 +178,8 @@ enum PieceSource {
 pub struct BackgroundJobs {
     storage: Arc<VizierStorage>,
     transport: VizierTransport,
+    /// Terminal job outcomes become notifications (spec 029). Never `reporting`.
+    notifications: crate::notifications::Notifications,
     /// One cancel signal per live runner. It only *signals*; the guarded database transition
     /// decides whether a cancel took effect, so losing this map (a restart) cannot break the
     /// exactly-once rule.
@@ -185,10 +187,15 @@ pub struct BackgroundJobs {
 }
 
 impl BackgroundJobs {
-    pub fn new(storage: Arc<VizierStorage>, transport: VizierTransport) -> Self {
+    pub fn new(
+        storage: Arc<VizierStorage>,
+        transport: VizierTransport,
+        notifications: crate::notifications::Notifications,
+    ) -> Self {
         Self {
             storage,
             transport,
+            notifications,
             cancels: Arc::new(Mutex::new(HashMap::new())),
         }
     }
@@ -406,6 +413,16 @@ impl BackgroundJobs {
                         tracing::warn!("failed to mark recovered background job {} reported: {}", job.id, e);
                     }
                     self.publish_stored(&job.id).await;
+                    self.notifications
+                        .job_ended(
+                            &job.id,
+                            &job.origin.0,
+                            job.kind,
+                            JobState::Reported,
+                            None,
+                            Utc::now(),
+                        )
+                        .await;
                 }
                 JobState::Running => {
                     let sources = job
@@ -592,6 +609,16 @@ impl BackgroundJobs {
                         tracing::warn!("failed to mark background job {} reported: {}", job.id, e);
                     }
                     self.publish_stored(&job.id).await;
+                    self.notifications
+                        .job_ended(
+                            &job.id,
+                            &job.origin.0,
+                            job.kind,
+                            JobState::Reported,
+                            None,
+                            Utc::now(),
+                        )
+                        .await;
                     return;
                 }
                 Err(err) => last_err = Some(err.to_string()),
@@ -610,7 +637,7 @@ impl BackgroundJobs {
                 JobState::Reporting,
                 JobState::Undelivered,
                 None,
-                Some(reason),
+                Some(reason.clone()),
                 Utc::now(),
             )
             .await
@@ -618,6 +645,16 @@ impl BackgroundJobs {
             tracing::warn!("failed to mark background job {} undelivered: {}", job.id, e);
         }
         self.publish_stored(&job.id).await;
+        self.notifications
+            .job_ended(
+                &job.id,
+                &job.origin.0,
+                job.kind,
+                JobState::Undelivered,
+                Some(&reason),
+                Utc::now(),
+            )
+            .await;
     }
 
     /// The existing `abort` command, sent to a piece's session.
@@ -741,6 +778,16 @@ impl BackgroundJobs {
 
             self.publish(&job);
             tracing::info!("cancelled background job {} ({})", job_id, by.to_column());
+            self.notifications
+                .job_ended(
+                    &job.id,
+                    &job.origin.0,
+                    job.kind,
+                    JobState::Cancelled,
+                    job.reason.as_deref(),
+                    Utc::now(),
+                )
+                .await;
 
             Ok(CancelOutcome::Cancelled {
                 job,
@@ -876,7 +923,12 @@ mod tests {
                 dir.path().to_path_buf(),
             )),
         ));
-        let jobs = BackgroundJobs::new(Arc::new(storage), VizierTransport::new());
+        let storage = Arc::new(storage);
+        let jobs = BackgroundJobs::new(
+            storage.clone(),
+            VizierTransport::new(),
+            crate::notifications::Notifications::new(storage),
+        );
         let ctx = ToolContext {
             loaded_images: Default::default(),
             recalled: Default::default(),
