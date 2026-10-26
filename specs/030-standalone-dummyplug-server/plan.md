@@ -16,7 +16,7 @@ Extract dummyplug into an independent, stateless Node.js server in the `vizier-l
 
 **Storage**: Vizier's existing SQLite is unchanged. Dummyplug stores no test state or request records. A test harness may keep temporary scenario state and logs outside dummyplug, with its own cleanup and redaction policy.
 
-**Testing**: Server `npm ci` and `npm test` with `node:test`; Vizier `cargo test` and `cargo clippy`; stock OpenAI-compatible SDK conformance; server-independent legacy golden cases; [quickstart.md](quickstart.md) scripts the mandatory dummyplug-agent end-to-end gate.
+**Testing**: Server `npm ci` and `npm test` with `node:test`; Vizier `cargo test` and `cargo clippy`; stock OpenAI-compatible SDK conformance; server-independent legacy golden cases; [quickstart.md](quickstart.md) scripts the mandatory dummyplug-agent end-to-end gate. Run the documented checks locally; this feature adds no GitHub Actions workflow.
 
 **Target Platform**: Local macOS/Linux development and Linux CI/container; do not add a dependency to Vizier's cross-build targets.
 
@@ -26,7 +26,7 @@ Extract dummyplug into an independent, stateless Node.js server in the `vizier-l
 
 **Constraints**: Preserve all legacy protocol cases and any model string; no API key for chat; no dummyplug-owned scenario or inspection API; no dummyplug process spawned by `just run`; no required service for Vizier startup or non-dummyplug agents.
 
-**Scale/Scope**: One independent model server and a separate test-owned proxy for injected responses and multi-attempt scenarios; one new submodule, provider wiring, e2e/CI/docs updates. Media generation and embeddings are outside this feature.
+**Scale/Scope**: One independent model server and a separate test-owned proxy for injected responses and multi-attempt scenarios; one new submodule, provider wiring, e2e and documentation updates. Media generation and embeddings are outside this feature.
 
 ## Constitution Check
 
@@ -47,7 +47,7 @@ Extract dummyplug into an independent, stateless Node.js server in the `vizier-l
 2. **OpenAI wire contract**: Add `/healthz`, `/v1/models`, and `/v1/chat/completions` for whole and SSE replies. Normalize text strings/parts, tool calls/results, token limit and tool choice; compare whole/stream output for deterministic legacy commands. Test with a stock SDK as well as raw HTTP.
 3. **Test harness**: Put failure sequences, delays/holds, substituted completions, usage, reasoning, malformed responses, and request inspection in a separate test-owned proxy. Add no test command, control header, scenario, request-log, reset, or release API to dummyplug.
 4. **Vizier provider conversion**: Remove the in-process model and resolver refusal; set dummyplug's catalogue dialect to `OpenAiChat`, default base URL `http://127.0.0.1:9998/v1`, and optional `DUMMYPLUG_URL`. Generalize environment-to-provider-field resolution so the URL actually overrides. Permit GET/PUT provider configuration with editable `base_url`; retain the static model fallback and arbitrary model strings. Validate attachment and tool-result normalization across the HTTP boundary.
-5. **Harness and documentation**: Add `dummyplug/` submodule, a `just dummyplug` recipe that runs `npm start` in that package, Node.js server checks, Compose service and service URL, and a test-owned proxy that sequences failures and captures requests when those checks need state. CI installs the pinned package with `npm ci`, starts it, and runs Vizier e2e. Revise protocol/provider API/quickstarts/docs and update submodule cascade order to `dummyplug → vizier`, while preserving design → webui → vizier for other changes.
+5. **Harness and documentation**: Add `dummyplug/` submodule, a `just dummyplug` recipe that runs `npm start` in that package, Node.js server checks, Compose service and service URL, and a test-owned proxy that sequences failures and captures requests when local e2e checks need state. Keep the checks runnable through the documented local harness; this feature does not add a GitHub Actions workflow. Revise protocol/provider API/quickstarts/docs and update submodule cascade order to `dummyplug → vizier`, while preserving design → webui → vizier for other changes.
 6. **Review/merge order**: Land the independent dummyplug PR first. Pin that reviewed, fetchable commit in a Vizier PR containing provider conversion and harness/docs. A local-only commit is insufficient for recursive checkout or CI.
 
 ## Project Structure
@@ -79,7 +79,7 @@ vizier-lab/dummyplug/          # separate repository, pinned at vizier/dummyplug
 └── test/                     # golden protocol, SDK and HTTP conformance
 
 vizier/
-├── dummyplug/                # git submodule; never a Vizier Cargo workspace member
+├── dummyplug/                # git submodule; outside the Vizier Cargo workspace
 ├── src/catalogue/builtin.rs
 ├── src/provider_keys.rs
 ├── src/llm/resolve.rs
@@ -88,7 +88,6 @@ vizier/
 ├── Justfile
 ├── docker-compose.yaml       # optional dummyplug service and internal URL
 ├── scripts/                  # e2e and submodule automation
-├── .github/workflows/        # integration gate
 └── docs/                     # setup and protocol docs
 ```
 

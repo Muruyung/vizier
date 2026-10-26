@@ -75,7 +75,7 @@ A test author uses dummyplug's ordinary chat API for legacy behavior. To test de
 
 ### User Story 4 - Run and maintain the two projects reliably (Priority: P3)
 
-A contributor installs Vizier's dependencies, starts the test server and Vizier locally, or uses the sample container setup. Automated checks test the server on its own and Vizier against that server. A maintainer can review and merge the server change before the Vizier change that depends on it.
+A contributor installs Vizier's dependencies, starts the test server and Vizier locally, or uses the sample container setup. The documented local checks cover the server on its own and Vizier against that server. A maintainer can review and merge the server change before the Vizier change that depends on it.
 
 **Why this priority**: A replacement that cannot be started or tested consistently would weaken the project's mandatory offline gate.
 
@@ -86,7 +86,7 @@ A contributor installs Vizier's dependencies, starts the test server and Vizier 
 1. **Given** a fresh recursive checkout, **When** a contributor follows the setup instructions, **Then** the test server is available without building it as part of Vizier's normal build.
 2. **Given** the test server is unavailable, **When** a dummyplug agent tries to use it, **Then** Vizier reports an ordinary local-provider availability failure rather than silently using a private fallback.
 3. **Given** the sample container setup, **When** both services start, **Then** Vizier can reach dummyplug at the configured service address.
-4. **Given** a change to either project, **When** continuous checks run, **Then** standalone server checks and Vizier end-to-end checks run against the pinned server version.
+4. **Given** a contributor runs the documented local checks, **When** they test the pinned server version, **Then** standalone server checks and Vizier end-to-end checks can be run together without a GitHub Actions workflow added by this feature.
 5. **Given** separate changes to the server and Vizier, **When** maintainers review them, **Then** the dependency and merge order are documented and the Vizier change pins the reviewed server revision.
 
 ### Edge Cases
@@ -121,7 +121,7 @@ A contributor installs Vizier's dependencies, starts the test server and Vizier 
 - **FR-015**: Streaming work in dummyplug and delayed or held work in the harness MUST stop when the requesting client disconnects or cancels.
 - **FR-016**: Legacy behavior that may call a tool despite `tool_choice: none` MUST remain unchanged. A test may exercise alternative behavior through a harness-generated response, not a dummyplug control.
 - **FR-017**: Standalone conformance checks MUST cover model listing, whole and streamed text, tool calls, tool-result echo, and all legacy protocol cases without requiring Vizier.
-- **FR-018**: Vizier's existing dummyplug quickstarts and end-to-end checks MUST run with the server; automated checks MUST start the server and test both projects together.
+- **FR-018**: Vizier's existing dummyplug quickstarts and end-to-end checks MUST run with the server; the documented local harness MUST start the server and support checks across both projects. This feature does not add a GitHub Actions workflow.
 - **FR-019**: Documentation MUST explain local and container startup, the separate-server requirement, address override, harness-owned test behavior, all legacy commands, and the reviewed server-to-Vizier update order; stale tool examples MUST be corrected.
 - **FR-020**: The normal Vizier build and test MUST remain independent of building the dummyplug server, and Vizier MUST remain runnable without the server when no dummyplug agent is used.
 
@@ -141,7 +141,7 @@ A contributor installs Vizier's dependencies, starts the test server and Vizier 
 - **SC-002**: 100% of existing Vizier dummyplug quickstarts and end-to-end checks pass with the server running; no test requires a live model credential.
 - **SC-003**: A stock OpenAI-compatible SDK completes model listing, whole chat, streamed chat, a tool call, and tool-result echo against dummyplug without Vizier.
 - **SC-004**: For every deterministic legacy conformance case, reassembling streamed content yields exactly the same answer as a whole completion; random cases satisfy the documented shape.
-- **SC-005**: Automated checks demonstrate a harness-managed temporary failure followed by success, a failed turn, nonzero usage, a cancellable hold, and two isolated parallel harness scenarios without dummyplug test controls or state.
+- **SC-005**: The documented test harness demonstrates a temporary failure followed by success, a failed turn, nonzero usage, a cancellable hold, and two isolated parallel scenarios without dummyplug test controls or state.
 - **SC-006**: A contributor following the documented local setup can start both programs and complete a dummyplug conversation without editing an existing agent.
 - **SC-007**: The normal Vizier build and tests complete without building dummyplug; Vizier starts successfully when the optional dummyplug server is absent and no dummyplug agent is used.
 
@@ -156,7 +156,7 @@ The feature is complete only when the following evidence is recorded against the
 | Provider failures and retries | Through a test-owned HTTP proxy, return two failures and forward the third request to dummyplug. Observe three proxy-recorded attempts for one Vizier turn and the final successful answer. Separately exhaust Vizier's retry policy and observe a failed turn while `/api/v1/ping` remains healthy. Verify nonzero and cached usage in the proxy's response and Vizier's recorded turn data; direct dummyplug usage stays at its legacy zero default. |
 | Cancellation and streaming | While the harness holds or delays a response, disconnect Vizier before release; prove the harness sends no later completion. Abort a dummyplug SSE client mid-stream and verify production stops. A harness-truncated stream must omit both the final finish chunk and `[DONE]`. Check whole/stream equivalence for deterministic text and tool-call content. |
 | Statelessness and isolation | Send deterministic request A, then unrelated requests, then A again; compare exact responses. Repeat with concurrent clients and after restart; check random cases by shape. Confirm dummyplug has no test commands, headers, scenario or log endpoints, or request-record store. Run two parallel harness plans and prove each captures only its own attempts; protect and clean up captured prompts in the harness. |
-| Deployment and publication | Push the server commit to `vizier-lab/dummyplug` before pinning it in a Vizier PR. From a fresh recursive checkout, resolve the pinned gitlink, run the documented local path and Compose path, and reach dummyplug from Vizier at the service URL. CI must run standalone checks plus the Vizier gates against that gitlink. The normal Vizier build and a non-dummyplug startup must succeed without building or starting dummyplug. |
+| Deployment and publication | Push the server commit to `vizier-lab/dummyplug` before pinning it in a Vizier PR. From a fresh recursive checkout, resolve the pinned gitlink, run the documented local path and Compose path, and reach dummyplug from Vizier at the service URL. Run standalone checks and Vizier gates locally against that gitlink. The normal Vizier build and a non-dummyplug startup must succeed without building or starting dummyplug. |
 
 Record each command, commit SHA, result, and any environmental limitation in the implementation PR. A gate that has not run remains **unverified**, even if the corresponding code is present.
 

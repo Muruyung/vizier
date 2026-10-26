@@ -15,5 +15,5 @@ Vizier does not construct `DummyplugModel`, start the server, or fall back to an
 
 - `just run` starts Vizier alone. `just dummyplug` starts the pinned server in a separate terminal. The e2e harness starts and stops it for tests.
 - Compose gives Vizier `DUMMYPLUG_URL=http://dummyplug:9998/v1` and includes an explicitly started dummyplug service.
-- A standalone dummyplug PR lands first. A Vizier PR pins its reviewed commit as `dummyplug/` and updates code, CI, docs and submodule automation. CI checks the pinned version, not a floating branch.
+- A standalone dummyplug PR lands first. A Vizier PR pins its reviewed commit as `dummyplug/` and updates code, docs and submodule automation. Contributors run the documented local checks against the pinned version; this feature adds no GitHub Actions workflow.
 - `cargo build --release`, ordinary `cargo test`, and non-dummyplug runtime do not build or require the server.

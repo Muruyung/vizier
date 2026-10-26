@@ -2,7 +2,7 @@
 
 These commands and checks are the acceptance script for the implementation PR. The `dummyplug/` submodule and `just dummyplug` recipe are planned interfaces; they are not part of this spec-only branch.
 
-Use the [completion gate](spec.md#completion-gate) for required evidence. Run the implementation checks against the exact dummyplug commit pinned by the Vizier gitlink; publish that commit before testing a fresh recursive checkout or CI.
+Use the [completion gate](spec.md#completion-gate) for required evidence. Run the implementation checks locally against the exact dummyplug commit pinned by the Vizier gitlink; publish that commit before testing a fresh recursive checkout.
 
 ## 1. Start both processes locally
 
@@ -67,7 +67,7 @@ cargo clippy
 node --test scripts/*.test.mjs
 ```
 
-Run the CI e2e harness against the pinned submodule commit and run Vizier with `DUMMYPLUG_URL=http://127.0.0.1:9998/v1`. Use `docker-compose.yaml` with the dummyplug service and verify Vizier reaches `http://dummyplug:9998/v1` inside Compose. Build and start the normal Vizier release without building or starting dummyplug; non-dummyplug agents must still work.
+Run the local e2e harness against the pinned submodule commit and run Vizier with `DUMMYPLUG_URL=http://127.0.0.1:9998/v1`. Use `docker-compose.yaml` with the dummyplug service and verify Vizier reaches `http://dummyplug:9998/v1` inside Compose. Build and start the normal Vizier release without building or starting dummyplug; non-dummyplug agents must still work. This feature does not add a GitHub Actions workflow.
 
 ## 6. Review order
 
