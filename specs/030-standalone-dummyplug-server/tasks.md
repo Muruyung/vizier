@@ -12,17 +12,17 @@
 
 **Purpose**: Establish the independently maintained server and record its source revision.
 
-- [ ] T001 Create or confirm the standalone Node.js package and `start`/`test` scripts in `dummyplug/package.json` and `dummyplug/package-lock.json`
-- [ ] T002 [P] Configure Node.js ignore rules in `dummyplug/.gitignore`
-- [ ] T003 [P] Add local and container startup instructions to `dummyplug/README.md` and `dummyplug/Dockerfile`
+- [X] T001 Create or confirm the standalone Node.js package and `start`/`test` scripts in `dummyplug/package.json` and `dummyplug/package-lock.json`
+- [X] T002 [P] Configure Node.js ignore rules in `dummyplug/.gitignore`
+- [X] T003 [P] Add local and container startup instructions to `dummyplug/README.md` and `dummyplug/Dockerfile`
 
 ## Phase 2: Foundational
 
 **Purpose**: Define request-local normalization and response representation shared by legacy and OpenAI surfaces.
 
-- [ ] T004 Implement OpenAI chat request normalization and legacy command parsing in `dummyplug/src/protocol.mjs`
-- [ ] T005 Implement request-local canonical completions and JSON/SSE serialization in `dummyplug/src/protocol.mjs`
-- [ ] T006 Add the standalone HTTP server, configurable bind address, structured logging, and disconnect cancellation in `dummyplug/src/server.mjs`
+- [X] T004 Implement OpenAI chat request normalization and legacy command parsing in `dummyplug/src/protocol.mjs`
+- [X] T005 Implement request-local canonical completions and JSON/SSE serialization in `dummyplug/src/protocol.mjs`
+- [X] T006 Add the standalone HTTP server, configurable bind address, structured logging, and disconnect cancellation in `dummyplug/src/server.mjs`
 
 ## Phase 3: User Story 1 - Preserve Existing Dummyplug Behavior (Priority: P1)
 
@@ -32,15 +32,15 @@
 
 ### Tests for User Story 1
 
-- [ ] T007 [P] [US1] Add legacy protocol conformance cases for command precedence, normalization, tool listing/description, JSON tool requests, errors, and `tool_choice: none` in `dummyplug/test/legacy-protocol.test.mjs`
-- [ ] T008 [P] [US1] Add statelessness and multi-tool-result echo cases in `dummyplug/test/request-isolation.test.mjs`
+- [X] T007 [P] [US1] Add legacy protocol conformance cases for command precedence, normalization, tool listing/description, JSON tool requests, errors, and `tool_choice: none` in `dummyplug/test/legacy-protocol.test.mjs`
+- [X] T008 [P] [US1] Add statelessness and multi-tool-result echo cases in `dummyplug/test/request-isolation.test.mjs`
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Port legacy reply precedence, tool listing/description, and sample JSON generation to `dummyplug/src/protocol.mjs`
-- [ ] T010 [US1] Port valid tool-call parsing, malformed/unknown request text, and trailing tool-result echo to `dummyplug/src/protocol.mjs`
-- [ ] T011 [US1] Preserve lorem response shape, default zero usage, and historical tool-call behavior when `tool_choice` is `none` in `dummyplug/src/protocol.mjs`
-- [ ] T012 [US1] Ensure each request discards normalized input and generated scenario data after response completion in `dummyplug/src/server.mjs`
+- [X] T009 [US1] Port legacy reply precedence, tool listing/description, and sample JSON generation to `dummyplug/src/protocol.mjs`
+- [X] T010 [US1] Port valid tool-call parsing, malformed/unknown request text, and trailing tool-result echo to `dummyplug/src/protocol.mjs`
+- [X] T011 [US1] Preserve lorem response shape, default zero usage, and historical tool-call behavior when `tool_choice` is `none` in `dummyplug/src/protocol.mjs`
+- [X] T012 [US1] Ensure each request discards normalized input and generated scenario data after response completion in `dummyplug/src/server.mjs`
 - [ ] T013 [US1] Run the existing Vizier dummyplug flow against the standalone server and record deterministic comparisons in `specs/030-standalone-dummyplug-server/acceptance-status.md`
 
 ## Phase 4: User Story 2 - OpenAI-Compatible Standalone Use (Priority: P2)
@@ -51,16 +51,16 @@
 
 ### Tests for User Story 2
 
-- [ ] T014 [P] [US2] Add HTTP contract tests for health, model listing, whole completions, accepted authorization headers, and malformed payloads in `dummyplug/test/openai-http.test.mjs`
-- [ ] T015 [P] [US2] Add SSE tests for role/content/tool-call deltas, optional usage chunk, finish reason, `[DONE]`, cancellation, and whole/stream equivalence in `dummyplug/test/openai-stream.test.mjs`
-- [ ] T016 [P] [US2] Add a stock OpenAI-compatible SDK conformance client in `dummyplug/test/sdk-conformance.test.mjs`
+- [X] T014 [P] [US2] Add HTTP contract tests for health, model listing, whole completions, accepted authorization headers, and malformed payloads in `dummyplug/test/openai-http.test.mjs`
+- [X] T015 [P] [US2] Add SSE tests for role/content/tool-call deltas, optional usage chunk, finish reason, `[DONE]`, cancellation, and whole/stream equivalence in `dummyplug/test/openai-stream.test.mjs`
+- [X] T016 [P] [US2] Add a stock OpenAI-compatible SDK conformance client in `dummyplug/test/sdk-conformance.test.mjs`
 
 ### Implementation for User Story 2
 
-- [ ] T017 [US2] Implement `GET /healthz`, `GET /v1/models`, and `POST /v1/chat/completions` in `dummyplug/src/server.mjs`
-- [ ] T018 [US2] Implement OpenAI Chat Completions JSON and tool-result wire mapping in `dummyplug/src/protocol.mjs`
-- [ ] T019 [US2] Implement SSE serialization from the canonical completion and stop production on client disconnect in `dummyplug/src/server.mjs`
-- [ ] T020 [US2] Run raw HTTP and SDK conformance checks and record results in `specs/030-standalone-dummyplug-server/acceptance-status.md`
+- [X] T017 [US2] Implement `GET /healthz`, `GET /v1/models`, and `POST /v1/chat/completions` in `dummyplug/src/server.mjs`
+- [X] T018 [US2] Implement OpenAI Chat Completions JSON and tool-result wire mapping in `dummyplug/src/protocol.mjs`
+- [X] T019 [US2] Implement SSE serialization from the canonical completion and stop production on client disconnect in `dummyplug/src/server.mjs`
+- [X] T020 [US2] Run raw HTTP and SDK conformance checks and record results in `specs/030-standalone-dummyplug-server/acceptance-status.md`
 
 ## Phase 5: User Story 3 - Harness-Owned Provider Behavior Tests (Priority: P2)
 
@@ -70,13 +70,13 @@
 
 ### Tests for User Story 3
 
-- [ ] T021 [P] [US3] Add proxy tests for delay/hold, injected status plus `Retry-After`, substituted completions, cancellation, redaction, cleanup, and scenario isolation in `scripts/dummyplug-test-proxy.test.mjs`
-- [ ] T022 [P] [US3] Add server-surface tests proving test-specific commands, headers, scenario endpoints, and request-log endpoints are absent in `dummyplug/test/public-surface.test.mjs`
+- [X] T021 [P] [US3] Add proxy tests for delay/hold, injected status plus `Retry-After`, substituted completions, cancellation, redaction, cleanup, and scenario isolation in `scripts/dummyplug-test-proxy.test.mjs`
+- [X] T022 [P] [US3] Add server-surface tests proving test-specific commands, headers, scenario endpoints, and request-log endpoints are absent in `dummyplug/test/public-surface.test.mjs`
 
 ### Implementation for User Story 3
 
-- [ ] T023 [US3] Implement a test-owned forwarding proxy with per-test response plans, cancellation, redacted request capture, and cleanup in `scripts/dummyplug-test-proxy.mjs`
-- [ ] T024 [US3] Add harness fixtures for retry sequences, nonzero/cached usage, reasoning, multiple tool calls, malformed arguments, finish reasons, and truncated SSE in `scripts/dummyplug-vizier-e2e.mjs`
+- [X] T023 [US3] Implement a test-owned forwarding proxy with per-test response plans, cancellation, redacted request capture, and cleanup in `scripts/dummyplug-test-proxy.mjs`
+- [X] T024 [US3] Add harness fixtures for retry sequences, nonzero/cached usage, reasoning, multiple tool calls, malformed arguments, finish reasons, and truncated SSE in `scripts/dummyplug-vizier-e2e.mjs`
 - [ ] T025 [US3] Run retry, failure, usage, streaming-cancellation, and parallel-isolation scenarios and record evidence in `specs/030-standalone-dummyplug-server/acceptance-status.md`
 
 ## Phase 6: User Story 4 - Vizier Integration and Reliable Project Workflow (Priority: P3)
@@ -87,19 +87,19 @@
 
 ### Tests for User Story 4
 
-- [ ] T026 [US4] Add provider resolution tests for the default URL, configured `base_url`, and `DUMMYPLUG_URL` precedence in `src/provider_keys.rs`
-- [ ] T027 [US4] Add API tests for dummyplug provider GET/PUT and catalogue behavior in `src/channels/http/api/v1/providers/mod.rs`
+- [X] T026 [US4] Add provider resolution tests for the default URL, configured `base_url`, and `DUMMYPLUG_URL` precedence in `src/provider_keys.rs`
+- [X] T027 [US4] Add API tests for dummyplug provider GET/PUT and catalogue behavior in `src/channels/http/api/v1/providers/mod.rs`
 - [ ] T028 [P] [US4] Add Vizier HTTP-provider integration checks for legacy commands, tool results, missing-server behavior, and arbitrary model strings in `scripts/dummyplug-vizier-e2e.test.mjs`
 
 ### Implementation for User Story 4
 
-- [ ] T029 [US4] Register dummyplug as a local `OpenAiChat` provider with `BaseUrl`, `DUMMYPLUG_URL`, and the local default in `src/catalogue/builtin.rs` and `src/provider_keys.rs`
-- [ ] T030 [US4] Remove the in-process dummyplug model branch and resolver refusal in `src/agents/agent/model/mod.rs` and `src/llm/resolve.rs`
-- [ ] T031 [US4] Make provider API GET/PUT expose the effective base URL while refusing unsupported fields in `src/channels/http/api/v1/providers/mod.rs`
-- [ ] T032 [US4] Add the `dummyplug/` git submodule and local server/test recipes in `.gitmodules` and `Justfile`
-- [ ] T033 [US4] Add the optional Compose service and internal `DUMMYPLUG_URL` in `docker-compose.yaml`
-- [ ] T034 [US4] Add dummyplug to submodule PR discovery and document the `dummyplug → vizier` merge order in `scripts/submodule-prs.mjs` and `docs/src/getting-started/contributing.md`
-- [ ] T035 [US4] Update provider docs, dummyplug quickstarts, and stale tool examples for separate-server startup in `docs/src/configuration/providers.md`, `docs/src/getting-started/quick-start.md`, and `specs/008-dummyplug-provider/`
+- [X] T029 [US4] Register dummyplug as a local `OpenAiChat` provider with `BaseUrl`, `DUMMYPLUG_URL`, and the local default in `src/catalogue/builtin.rs` and `src/provider_keys.rs`
+- [X] T030 [US4] Remove the in-process dummyplug model branch and resolver refusal in `src/agents/agent/model/mod.rs` and `src/llm/resolve.rs`
+- [X] T031 [US4] Make provider API GET/PUT expose the effective base URL while refusing unsupported fields in `src/channels/http/api/v1/providers/mod.rs`
+- [X] T032 [US4] Add the `dummyplug/` git submodule and local server/test recipes in `.gitmodules` and `Justfile`
+- [X] T033 [US4] Add the optional Compose service and internal `DUMMYPLUG_URL` in `docker-compose.yaml`
+- [X] T034 [US4] Add dummyplug to submodule PR discovery and document the `dummyplug → vizier` merge order in `scripts/submodule-prs.mjs` and `docs/src/getting-started/contributing.md`
+- [X] T035 [US4] Update provider docs, dummyplug quickstarts, and stale tool examples for separate-server startup in `docs/src/configuration/providers.md`, `docs/src/getting-started/quick-start.md`, and `specs/008-dummyplug-provider/`
 - [ ] T036 [US4] Verify normal Vizier build/test and non-dummyplug startup without the optional server; record results in `specs/030-standalone-dummyplug-server/acceptance-status.md`
 - [ ] T037 [US4] Complete local and Compose setup, recursive-checkout, e2e, failure/retry, cancellation, and pinned-revision evidence in `specs/030-standalone-dummyplug-server/acceptance-status.md`
 

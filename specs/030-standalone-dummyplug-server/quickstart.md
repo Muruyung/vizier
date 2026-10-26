@@ -54,6 +54,14 @@ Have the proxy hold a response, cancel the Vizier client, and verify no later re
 
 ## 5. Run project and deployment gates
 
+The optional Compose profile starts the server and gives Vizier its internal URL:
+
+```sh
+docker compose --profile dummyplug up -d
+```
+
+Without that profile, Vizier does not start or require dummyplug.
+
 ```sh
 npm ci --prefix dummyplug
 npm test --prefix dummyplug
