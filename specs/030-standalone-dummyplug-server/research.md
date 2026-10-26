@@ -1,5 +1,13 @@
 # Research: Standalone Dummyplug
 
+## R0 — Server runtime and packaging
+
+**Decision**: Implement the standalone server as a Node.js 22 package using native JavaScript ES modules, Node's built-in HTTP server and `node:test`. Commit `package-lock.json`, expose `npm start` and `npm test`, and use `npm ci` in fresh checkouts and CI. Vizier remains Rust; its normal Cargo build does not build or start this package.
+
+**Rationale**: The chosen Node.js runtime keeps the model server independently runnable and permits a small dependency set. The HTTP contract, deterministic legacy behavior and stateless boundary do not depend on the implementation language.
+
+**Alternatives considered**: The Rust/Cargo server layout suggested in issue #95; superseded by the team's Node.js decision. Embedding the Node.js process in Vizier; rejected because the server must remain independently runnable.
+
 ## R1 — Compatibility boundary
 
 **Decision**: Treat [legacy §1–§6](../008-dummyplug-provider/contracts/dummyplug-protocol.md) and the [context supplement](../013-reaction-awareness/contracts/dummyplug-context.md) as golden behavior. Port all current capabilities first, including text normalization, tool-list/sample formatting, JSON validation, tool-result echo, context and random lorem. Preserve the default tool call even for `tool_choice: none`; a test needing a different response uses its own proxy.

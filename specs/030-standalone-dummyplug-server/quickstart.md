@@ -6,10 +6,11 @@ Use the [completion gate](spec.md#completion-gate) for required evidence. Run th
 
 ## 1. Start both processes locally
 
-From a recursive Vizier checkout, run in separate terminals:
+From a recursive Vizier checkout with Node.js 22 installed, run in separate terminals:
 
 ```sh
 just install
+npm ci --prefix dummyplug
 just dummyplug
 ```
 
@@ -54,7 +55,8 @@ Have the proxy hold a response, cancel the Vizier client, and verify no later re
 ## 5. Run project and deployment gates
 
 ```sh
-cd dummyplug && cargo test && cargo clippy
+npm ci --prefix dummyplug
+npm test --prefix dummyplug
 ```
 
 From Vizier's root:
