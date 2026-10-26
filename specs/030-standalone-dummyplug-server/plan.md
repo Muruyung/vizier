@@ -6,7 +6,7 @@
 
 ## Summary
 
-Extract dummyplug into an independent Rust test server in the `vizier-lab/dummyplug` repository, pinned by a `dummyplug/` git submodule. First port all existing §1–§6 behavior with compatibility tests. Then expose OpenAI-compatible chat/model endpoints and isolated, bounded test controls. Route Vizier's `dummyplug` provider through its existing OpenAI Chat HTTP dialect, preserving agent provider/model values and keeping the optional server out of Vizier's normal build and startup.
+Extract dummyplug into an independent, stateless Rust server in the `vizier-lab/dummyplug` repository, pinned by a `dummyplug/` git submodule. Port all existing §1–§6 behavior with compatibility tests, then expose OpenAI-compatible chat/model endpoints. The consuming test harness owns response injection, scenario sequencing, and request logs. Route Vizier's `dummyplug` provider through its existing OpenAI Chat HTTP dialect, preserving agent provider/model values and keeping the optional server out of Vizier's normal build and startup.
 
 ## Technical Context
 
@@ -14,7 +14,7 @@ Extract dummyplug into an independent Rust test server in the `vizier-lab/dummyp
 
 **Primary Dependencies**: Vizier's existing `reqwest`, `serde`, `serde_json`, `tokio`, `tracing`, provider catalogue and `OpenAiChat` dialect; standalone server uses `axum`, `tokio`, `serde`, `serde_json`, `tracing` and only justified lightweight crates.
 
-**Storage**: Vizier's existing SQLite is unchanged. Dummyplug scenarios and request inspection are bounded process memory with TTL and reset; no durable store.
+**Storage**: Vizier's existing SQLite is unchanged. Dummyplug stores no test state or request records. A test harness may keep temporary scenario state and logs outside dummyplug, with its own cleanup and redaction policy.
 
 **Testing**: Server `cargo test` and `cargo clippy`; Vizier `cargo test` and `cargo clippy`; stock OpenAI-compatible SDK conformance; server-independent legacy golden cases; [quickstart.md](quickstart.md) scripts the mandatory dummyplug-agent end-to-end gate.
 
@@ -24,9 +24,9 @@ Extract dummyplug into an independent Rust test server in the `vizier-lab/dummyp
 
 **Performance Goals**: Default local request completes without deliberate test delay; `/healthz` and `/v1/models` answer promptly enough for provider discovery; delayed requests cancel on disconnect.
 
-**Constraints**: Preserve all legacy protocol cases and any model string; no API key for chat; control/inspection restricted locally by default; no dummyplug process spawned by `just run`; no required service for Vizier startup or non-dummyplug agents.
+**Constraints**: Preserve all legacy protocol cases and any model string; no API key for chat; no dummyplug-owned scenario or inspection API; no dummyplug process spawned by `just run`; no required service for Vizier startup or non-dummyplug agents.
 
-**Scale/Scope**: Single local test server, parallel test sessions, bounded logs and scenario state; one new submodule, provider wiring, e2e/CI/docs updates. Media generation and embeddings are outside this feature.
+**Scale/Scope**: One independent model server and a separate test-owned proxy for injected responses and multi-attempt scenarios; one new submodule, provider wiring, e2e/CI/docs updates. Media generation and embeddings are outside this feature.
 
 ## Constitution Check
 
@@ -44,10 +44,10 @@ Extract dummyplug into an independent Rust test server in the `vizier-lab/dummyp
 ## Implementation Sequence
 
 1. **Independent server and compatibility baseline**: Create/obtain `vizier-lab/dummyplug`; implement a protocol library and server binary. Capture golden tests from current §1–§6 implementation, including frontmatter, context part, attachments, fences, tool schema ordering, invalid JSON, tool result echo, lorem shape, and default `tool_choice: none` behavior. Port these before adding controls.
-2. **OpenAI wire contract**: Add `/healthz`, `/v1/models`, and `/v1/chat/completions` for whole and SSE replies. Normalize text strings/parts, tool calls/results, token limit and tool choice; make seeded whole/stream output equal. Test with a stock SDK as well as raw HTTP.
-3. **Test controls**: Add explicit `DUMMYPLUG` message commands, per-request headers, and local `/_dummyplug/*` endpoints. Implement session-isolated scripts, retry failures, usage, delays/holds, cancellation and bounded request inspection. Keep controls from shadowing legacy commands.
+2. **OpenAI wire contract**: Add `/healthz`, `/v1/models`, and `/v1/chat/completions` for whole and SSE replies. Normalize text strings/parts, tool calls/results, token limit and tool choice; compare whole/stream output for deterministic legacy commands. Test with a stock SDK as well as raw HTTP.
+3. **Test harness**: Put failure sequences, delays/holds, substituted completions, usage, reasoning, malformed responses, and request inspection in a separate test-owned proxy. Add no test command, control header, scenario, request-log, reset, or release API to dummyplug.
 4. **Vizier provider conversion**: Remove the in-process model and resolver refusal; set dummyplug's catalogue dialect to `OpenAiChat`, default base URL `http://127.0.0.1:9998/v1`, and optional `DUMMYPLUG_URL`. Generalize environment-to-provider-field resolution so the URL actually overrides. Permit GET/PUT provider configuration with editable `base_url`; retain the static model fallback and arbitrary model strings. Validate attachment and tool-result normalization across the HTTP boundary.
-5. **Harness and documentation**: Add `dummyplug/` submodule, `just dummyplug` and server checks, Compose service and service URL, CI job that starts the pinned server for Vizier e2e, plus revised protocol/provider API/quickstarts/docs. Update submodule cascade order to `dummyplug → vizier`, while preserving design → webui → vizier for other changes.
+5. **Harness and documentation**: Add `dummyplug/` submodule, `just dummyplug` and server checks, Compose service and service URL, and a test-owned proxy that sequences failures and captures requests when those checks need state. CI starts the pinned server and runs Vizier e2e. Revise protocol/provider API/quickstarts/docs and update submodule cascade order to `dummyplug → vizier`, while preserving design → webui → vizier for other changes.
 6. **Review/merge order**: Land the independent dummyplug PR first. Pin that reviewed, fetchable commit in a Vizier PR containing provider conversion and harness/docs. A local-only commit is insufficient for recursive checkout or CI.
 
 ## Project Structure
@@ -74,7 +74,7 @@ specs/030-standalone-dummyplug-server/
 vizier-lab/dummyplug/          # separate repository, pinned at vizier/dummyplug/
 ├── Cargo.toml                # protocol library + server binary workspace
 ├── crates/protocol/src/      # legacy behavior, normalization, response generation
-├── crates/server/src/        # HTTP routes, SSE, bounded control state
+├── crates/server/src/        # HTTP routes and SSE; request-local work only
 └── tests/                    # golden protocol, SDK and HTTP conformance
 
 vizier/

@@ -1,30 +1,29 @@
 # Data Model: Standalone Dummyplug
 
-All server state is in memory and expires; no entity below changes Vizier's durable agent schema.
+Dummyplug is a stateless HTTP model. It keeps only temporary data needed to complete a request; it has no test-session database, scenario queue, retry counter, or request log. No entity below changes Vizier's durable agent schema.
 
-| Entity | Fields | Rules |
+| Entity | Owner | Fields and rules |
 |---|---|---|
-| Chat request | `model`, ordered `messages`, `tools`, `tool_choice`, token limit, `stream`, `stream_options`, optional controls | Accept text string or text parts; preserve message/tool order. Unknown model string is accepted. Malformed wire payload returns a client error; malformed legacy JSON command returns assistant text per §3. |
-| Normalized message | role, text parts, optional tool-call ID/name/arguments, optional tool result, context part | Normalize frontmatter/trailer/fences for legacy command matching; keep raw request separately for inspection. Resolve a tool result name from prior assistant call, else use call ID. |
-| Canonical completion | stable ID, requested model, assistant content or tool calls, finish reason, usage | One generation pass feeds whole and SSE serializers. Default legacy usage is zero. Seeded repetitions produce identical observable result. |
-| Scenario | session ID, queued steps, next index, last activity, failure attempt counts | Session ID isolates parallel tests. Script steps are consumed atomically in arrival order. Exhaustion returns legacy default. Explicit reset and inactivity TTL remove state. |
-| Scenario step | optional response text/tool calls/reasoning/finish reason, delay/hold, failure status/count/retry-after, usage, stream termination | A failure count decrements only for its own session/step and succeeds after N failures. A hold completes only on release/cancel; disconnect cancels work. |
-| Request record | timestamp, session ID, request messages/tools/tool choice/token limit, relevant non-secret control headers, outcome | Bounded ring by count and bytes; redact Authorization and control token. Local or token-authorized inspection only. Reset clears records. |
-| Provider configuration | provider ID `dummyplug`, `base_url`, optional env override | Default `http://127.0.0.1:9998/v1`; user-configured URL and `DUMMYPLUG_URL` follow the ordinary provider precedence. Existing agent provider/model fields need no migration. |
+| Chat request | Client / dummyplug for the request lifetime | `model`, ordered `messages`, `tools`, `tool_choice`, token limit, `stream`, `stream_options`. Accept text string or text parts and any model string. Malformed wire payload returns a client error; malformed legacy JSON command returns assistant text per §3. |
+| Normalized message | Dummyplug for the request lifetime | Role, text parts, optional tool-call ID/name/arguments, tool result, context part. Normalize frontmatter/trailer/fences for legacy matching. Resolve a tool result name from the supplied prior assistant call, else use its call ID. No previous request is consulted. |
+| Canonical completion | Dummyplug for the response lifetime | Generated ID, requested model, assistant content or tool calls, finish reason, usage. One generation pass feeds whole and SSE serializers. Default legacy usage is zero. |
+| Test scenario | Consuming test harness | Ordered replies or failures, next attempt, and isolation key. The harness chooses an action per request, including whether to forward it to dummyplug. Dummyplug never receives or stores the plan. |
+| Request record | Consuming test harness | Timestamp, test ID, request messages/tools/tool choice/token limit, non-secret headers, outcome. The harness controls retention, redaction, and cleanup. Dummyplug exposes no record API. |
+| Provider configuration | Vizier | Provider ID `dummyplug`, `base_url`, optional env override. Default `http://127.0.0.1:9998/v1`; user-configured URL and `DUMMYPLUG_URL` follow ordinary provider precedence. Existing agent provider/model fields need no migration. |
 
-## State transitions
+## Request lifecycle
 
 ```text
-Scenario: absent → configured → active → exhausted → expired/reset
-Failure step: remaining=N → ... → remaining=1 → success → next step
-Held request: waiting → released → response; waiting → client disconnect → cancelled
-Stream: open → chunks → final finish/optional usage → [DONE]; open → disconnect/injected truncation → aborted
+HTTP request → normalize supplied messages → choose legacy reply from request
+             → whole JSON or SSE chunks → discard request-local data
 ```
+
+The test harness may delay, hold, or replace a response before Vizier receives it; those operations occur outside dummyplug. Disconnect cancels pending proxy work and dummyplug streaming work. A complete stream ends with a final finish chunk and `[DONE]`; a truncated or disconnected stream does not.
 
 ## Invariants
 
-- No test control changes a request without an explicit command, header, or programmed scenario.
-- Legacy command precedence is `tools`, `context`, exact tool name, JSON tool request, then `DUMMYPLUG` command and fallback text; a new command cannot shadow an existing one.
-- A scenario step is selected within its session only. Request inspection is observational and cannot alter the reply.
+- Deterministic legacy commands produce the same observable answer regardless of ordering, concurrent clients, or process restart. Random lorem and generated identifiers retain their documented shape.
+- No dummyplug test control or stored scenario changes a request.
+- Legacy command precedence remains trailing tool results, `tools`, `context`, exact tool name, JSON tool request, then fallback text.
 - A failed HTTP attempt and a cancelled stream never appear as a successful completion.
-- Limits and TTL have safe finite defaults; implementation tests exercise eviction and expiration.
+- Test logs and scenario state belong only to the harness; dummyplug stores neither.

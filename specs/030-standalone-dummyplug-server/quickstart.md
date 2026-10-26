@@ -24,11 +24,10 @@ Expect `curl http://127.0.0.1:9998/healthz` to be healthy and `curl http://127.0
 ```sh
 curl -sS http://127.0.0.1:9998/v1/chat/completions \
   -H 'Content-Type: application/json' \
-  -H 'X-Dummyplug-Seed: 42' \
-  -d '{"model":"dummyplug","messages":[{"role":"user","content":"hello"}]}'
+  -d '{"model":"dummyplug","messages":[{"role":"user","content":"tools"}]}'
 ```
 
-Expect a Chat Completion with assistant text, model, finish reason and zero usage. Repeat the same request and seed: observable output must match. Repeat with `"stream":true` and `"stream_options":{"include_usage":true}`; the content reconstructed from SSE deltas equals the whole answer, the stream ends with `[DONE]`, and the optional usage chunk has empty `choices`. Also run the same model-list/chat/stream/tool-call/tool-result sequence with a stock OpenAI-compatible SDK pointed at this base URL and a dummy API key if its constructor requires one.
+Expect a Chat Completion with assistant text, model, finish reason and zero usage. Repeat the deterministic `tools` request: its content must match. Repeat with `"stream":true` and `"stream_options":{"include_usage":true}`; content reconstructed from SSE deltas equals the whole `tools` answer, the stream ends with `[DONE]`, and the optional usage chunk has empty `choices`. For random lorem, compare the documented shape. Also run the same model-list/chat/stream/tool-call/tool-result sequence with a stock OpenAI-compatible SDK pointed at this base URL and a dummy API key if its constructor requires one.
 
 ## 3. Run the constitutional dummyplug-agent gate
 
@@ -38,19 +37,19 @@ In WebUI, create or reuse an agent with provider `dummyplug` and model `dummyplu
 |---|---|
 | `hello` | 1–3 nonempty lorem paragraphs. |
 | `tools` | Sorted, formatted available-tool list. |
-| An exact tool name from that list, such as `READ_CORE` | Full description and fenced sample JSON. |
+| An exact tool name from that list, such as `think` | Full description and fenced sample JSON. |
 | Paste the generated JSON request | One actionable tool call, tool history entry, then `**Tool result** (...)` echo. |
 | `{"tool":"nope"}` | Unknown-tool assistant text; no tool runs. |
 | `{"tool":` | Parse-error assistant text; no tool runs. |
 | `context` | The verbatim current `# Context` block or `(no context block)`. |
 
-Repeat the tool-name/JSON step with a state-changing tool such as `memory_write`; verify its stored result through the existing UI. Run the established dummyplug quickstarts and `scripts/client-tools-e2e.mjs` and `scripts/durable-turns-e2e.mjs` through the new harness. Compare all legacy §1–§6 goldens, including frontmatter, attached-file markers, fenced JSON, multiple trailing tool results, tool schema ordering, and `tool_choice: none`. No live model credential is required.
+Repeat the JSON step with an available state-changing action through `execute_python`; verify its result through the existing UI. Run the established dummyplug quickstarts and `scripts/client-tools-e2e.mjs` and `scripts/durable-turns-e2e.mjs` through the new harness. Compare all legacy §1–§6 goldens, including frontmatter, attached-file markers, fenced JSON, multiple trailing tool results, tool schema ordering, and `tool_choice: none`. No live model credential is required.
 
-## 4. Exercise controls and isolation
+## 4. Exercise harness behavior and server isolation
 
-Use two distinct `X-Dummyplug-Session` IDs. Program a two-failure-then-success step for session A through `PUT /_dummyplug/scenarios/A`; send three equal requests and expect the selected error status twice and a normal completion third, with configured `Retry-After` on failures. Session B remains on its independent script. Read `GET /_dummyplug/requests?session_id=A` and confirm messages, tools, tool choice and token limit are visible but Authorization is not. `POST /_dummyplug/reset` clears both log and state for the target session.
+Send `tools`, then unrelated requests, then `tools` again. The two answers must match exactly, including after a dummyplug restart. Verify dummyplug has no test-specific commands, control headers, scenario API, or request-log endpoint. For a Vizier retry test, place a test-owned HTTP proxy at `DUMMYPLUG_URL`: the proxy returns two selected failures, forwards the third attempt to dummyplug, and records requests and timing. Run two proxy plans concurrently and verify their counters and records remain isolated. The proxy must not retain Authorization or other credentials in its logs.
 
-Send a held request, cancel the client, and verify no later response or lingering task. Test an injected truncated SSE stream: it must lack a normal finish and `[DONE]`. Set nonzero usage and ensure the response reports it. Confirm the unmodified request still returns legacy zero usage, and that a plain `HOLD` yields lorem while an explicit `DUMMYPLUG` command activates a control.
+Have the proxy hold a response, cancel the Vizier client, and verify no later response or lingering proxy task. Test a proxy-truncated SSE stream: it must lack a normal finish and `[DONE]`. Have the proxy inject nonzero usage for one request and verify Vizier records it; a direct unmodified dummyplug request still reports zero usage. A plain `HOLD` or `DUMMYPLUG FAIL` sent directly to dummyplug follows legacy fallback behavior.
 
 ## 5. Run project and deployment gates
 

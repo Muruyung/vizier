@@ -25,17 +25,17 @@ The server accepts `model` (including arbitrary legacy model strings), ordered `
 }
 ```
 
-A valid legacy JSON tool command returns one assistant `tool_calls` entry with `type: "function"`, a stable `id`, `function.name`, and `function.arguments` encoded as a JSON string; `finish_reason` is `tool_calls`. Legacy malformed/unknown tool commands return a successful assistant text response with the exact §3 error wording. Default usage remains zero; explicit usage controls may set nonzero counts and cached-token detail.
+A valid legacy JSON tool command returns one assistant `tool_calls` entry with `type: "function"`, an `id` consistent within that completion, `function.name`, and `function.arguments` encoded as a JSON string; `finish_reason` is `tool_calls`. Legacy malformed/unknown tool commands return a successful assistant text response with the exact §3 error wording. Dummyplug reports default zero usage; tests needing nonzero or cached usage supply a replacement response from the harness proxy.
 
 ## Streaming
 
-SSE uses `data: {chat.completion.chunk JSON}\n\n` records followed by `data: [DONE]\n\n`. The first choice delta identifies `role: "assistant"`; subsequent deltas carry content or indexed tool-call fragments; the final choice chunk supplies `finish_reason`. If `stream_options.include_usage` is true, one final JSON chunk has `choices: []` and `usage` before `[DONE]`. The server builds whole and streamed forms from the same canonical completion. For the same request, seed and scenario state, concatenated content and reconstructed tool arguments match the whole result exactly. A deliberately truncated stream lacks a normal finish and `[DONE]`.
+SSE uses `data: {chat.completion.chunk JSON}\n\n` records followed by `data: [DONE]\n\n`. The first choice delta identifies `role: "assistant"`; subsequent deltas carry content or indexed tool-call fragments; the final choice chunk supplies `finish_reason`. If `stream_options.include_usage` is true, one final JSON chunk has `choices: []` and `usage` before `[DONE]`. The server builds whole and streamed forms from the same canonical completion. Deterministic legacy content reassembles to the same whole answer; random content and generated identifiers are checked by shape across separate requests. A harness-truncated stream lacks a normal finish and `[DONE]`.
 
 ## Error boundary
 
 - Invalid HTTP/Chat payload: a structured non-2xx API error.
 - Legacy command parse or validation error: `200` assistant text, no tool call.
-- Injected failure: configured non-2xx status and optional `Retry-After` header for exactly the configured attempts.
+- Test-injected failure: a harness proxy, not dummyplug, returns the selected non-2xx status and optional `Retry-After` header and counts retry attempts.
 - Missing server: Vizier reports an ordinary provider connection error; no in-process fallback.
 
 See [legacy protocol](../../008-dummyplug-provider/contracts/dummyplug-protocol.md) for precise user-visible command output. The wire shape follows the [official Chat Completions API](https://platform.openai.com/docs/api-reference/chat).

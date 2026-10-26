@@ -25,12 +25,13 @@
 ## Feature Readiness
 
 - [x] All functional requirements have an acceptance path in the stories or success criteria
-- [x] Stories cover compatibility, independent use, test controls, and project integration
+- [x] Stories cover compatibility, independent use, harness-owned test behavior, and project integration
 - [x] Feature has measurable outcomes for compatibility and provider-path testing
 - [x] Technical design choices are deferred to planning except for interfaces required by issue #95
 
 ## Notes
 
 - Reviewed against issue #95, the decisions in this conversation, the existing dummyplug contract, and Vizier constitution 1.2.0.
-- The source issue's literal “byte-for-byte” requirement is interpreted as exact matching for deterministic outputs. Unseeded lorem ipsum remains random but keeps its documented format.
+- The source issue's literal “byte-for-byte” requirement is interpreted as exact matching for deterministic outputs. Lorem ipsum and generated identifiers remain random but keep their documented format.
+- Later architecture feedback moves all test orchestration and response injection out of dummyplug; the spec explicitly records this narrower boundary than issue #95's original control proposal.
 - Ready for `/speckit-plan`; no clarification markers remain.
