@@ -41,7 +41,7 @@
 - [X] T010 [US1] Port valid tool-call parsing, malformed/unknown request text, and trailing tool-result echo to `dummyplug/src/protocol.mjs`
 - [X] T011 [US1] Preserve lorem response shape, default zero usage, and historical tool-call behavior when `tool_choice` is `none` in `dummyplug/src/protocol.mjs`
 - [X] T012 [US1] Ensure each request discards normalized input and generated scenario data after response completion in `dummyplug/src/server.mjs`
-- [ ] T013 [US1] Run the existing Vizier dummyplug flow against the standalone server and record deterministic comparisons in `specs/030-standalone-dummyplug-server/acceptance-status.md`
+- [ ] T013 [US1] Run the existing Vizier dummyplug flow against the standalone server and record deterministic comparisons in `specs/030-standalone-dummyplug-server/acceptance-status.md` (a basic live `tools` command smoke passed; full quickstart/tool-result comparison remains open)
 
 ## Phase 4: User Story 2 - OpenAI-Compatible Standalone Use (Priority: P2)
 
@@ -100,7 +100,7 @@
 - [X] T033 [US4] Add the optional Compose service and internal `DUMMYPLUG_URL` in `docker-compose.yaml`
 - [X] T034 [US4] Add dummyplug to submodule PR discovery and document the `dummyplug → vizier` merge order in `scripts/submodule-prs.mjs` and `docs/src/getting-started/contributing.md`
 - [X] T035 [US4] Update provider docs, dummyplug quickstarts, and stale tool examples for separate-server startup in `docs/src/configuration/providers.md`, `docs/src/getting-started/quick-start.md`, and `specs/008-dummyplug-provider/`
-- [ ] T036 [US4] Verify normal Vizier build/test and non-dummyplug startup without the optional server; record results in `specs/030-standalone-dummyplug-server/acceptance-status.md`
+- [X] T036 [US4] Verify normal Vizier test suite and non-dummyplug startup without the optional server; record results in `specs/030-standalone-dummyplug-server/acceptance-status.md`
 - [ ] T037 [US4] Complete local and Compose setup, recursive-checkout, e2e, failure/retry, cancellation, and pinned-revision evidence in `specs/030-standalone-dummyplug-server/acceptance-status.md`
 
 ## Dependencies & Execution Order

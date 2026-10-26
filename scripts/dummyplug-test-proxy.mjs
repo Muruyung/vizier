@@ -53,7 +53,11 @@ export function createDummyplugTestProxy({ upstream = process.env.DUMMYPLUG_UPST
       const rawBody = Buffer.concat(chunks);
       const scenario = String(request.headers['x-vizier-test-scenario'] ?? 'default');
       const plan = plans.get(scenario) ?? [];
-      const step = plan.shift();
+      const target = new URL(request.url ?? '/', upstream);
+      // Provider setup and catalogue refresh also call /v1/models. A response plan is for chat
+      // attempts in one turn; discovery requests must not consume retries or injected replies.
+      const isChatCompletion = request.method === 'POST' && target.pathname.endsWith('/chat/completions');
+      const step = isChatCompletion ? plan.shift() : undefined;
       captures.push({ at: Date.now(), scenario, method: request.method, path: redactPath(request.url), headers: redactHeaders(request.headers), body: redactBody(rawBody) });
 
       if (step?.delay_ms) await wait(step.delay_ms, controller.signal);
@@ -67,7 +71,6 @@ export function createDummyplugTestProxy({ upstream = process.env.DUMMYPLUG_UPST
         response.end(body);
         return;
       }
-      const target = new URL(request.url ?? '/', upstream);
       const upstreamResponse = await fetch(target, {
         method: request.method,
         headers: Object.fromEntries(Object.entries(request.headers).filter(([name]) => !['host', 'connection', 'content-length', 'x-vizier-test-scenario'].includes(name))),

@@ -4,7 +4,7 @@ import { dummyplugScenarios } from './dummyplug-vizier-e2e.mjs';
 
 test('integration fixture provides isolated retry, cancellation, and response plans', () => {
   assert.equal(dummyplugScenarios.retryThenSuccess.length, 2);
-  assert.equal(dummyplugScenarios.exhaustedRetries.length, 3);
+  assert.equal(dummyplugScenarios.exhaustedRetries.length, 4);
   assert.ok(dummyplugScenarios.delayedCancellation[0].delay_ms > 0);
   assert.match(dummyplugScenarios.truncatedSse[0].body, /partial/u);
   assert.equal(dummyplugScenarios.nonzeroUsage[0].body.usage.total_tokens, 17);

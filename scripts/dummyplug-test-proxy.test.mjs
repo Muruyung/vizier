@@ -11,10 +11,13 @@ test('proxy injects scoped failures, redacts credentials, and cleans scenario st
   const address = await listen(proxy.server);
   t.after(async () => { await proxy.close(); await new Promise((resolve) => upstream.close(resolve)); });
   proxy.setPlan('retry', [{ status: 429, retry_after: 1, body: { error: { message: 'retry' } } }]);
-  const failed = await fetch(address, { method: 'POST', headers: { authorization: 'Bearer secret', 'x-vizier-test-scenario': 'retry' }, body: JSON.stringify({ api_key: 'body-secret' }) });
+  const headers = { authorization: 'Bearer secret', 'x-vizier-test-scenario': 'retry' };
+  const models = await fetch(`${address}/v1/models`, { headers });
+  assert.equal(models.status, 200);
+  const failed = await fetch(`${address}/v1/chat/completions`, { method: 'POST', headers, body: JSON.stringify({ api_key: 'body-secret' }) });
   assert.equal(failed.status, 429);
   assert.equal(failed.headers.get('retry-after'), '1');
-  const capture = proxy.requests('retry')[0];
+  const capture = proxy.requests('retry').find((item) => item.path === '/v1/chat/completions');
   assert.equal(capture.headers.authorization, '[REDACTED]');
   assert.equal(JSON.parse(capture.body).api_key, '[REDACTED]');
   proxy.clear('retry');
@@ -29,7 +32,7 @@ test('plans remain isolated and may substitute delayed responses', async (t) => 
   t.after(async () => { await proxy.close(); await new Promise((resolve) => upstream.close(resolve)); });
   proxy.setPlan('one', [{ delay_ms: 5, body: { injected: 1 } }]);
   proxy.setPlan('two', [{ status: 418, body: { injected: 2 } }]);
-  const post = (scenario) => fetch(address, { method: 'POST', headers: { 'x-vizier-test-scenario': scenario }, body: '{}' });
+  const post = (scenario) => fetch(`${address}/v1/chat/completions`, { method: 'POST', headers: { 'x-vizier-test-scenario': scenario }, body: '{}' });
   const [one, two] = await Promise.all([post('one'), post('two')]);
   assert.deepEqual(await one.json(), { injected: 1 });
   assert.equal(two.status, 418);
@@ -46,7 +49,7 @@ test('a client disconnect cancels a held proxy request', async (t) => {
   const held = { hold: true };
   proxy.setPlan('held', [held]);
   const controller = new AbortController();
-  const pending = fetch(address, { method: 'POST', headers: { 'x-vizier-test-scenario': 'held' }, body: '{}', signal: controller.signal }).catch(() => {});
+  const pending = fetch(`${address}/v1/chat/completions`, { method: 'POST', headers: { 'x-vizier-test-scenario': 'held' }, body: '{}', signal: controller.signal }).catch(() => {});
   for (let i = 0; i < 20 && !proxy.requests('held').length; i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
   assert.equal(proxy.requests('held').length, 1);
   controller.abort();
