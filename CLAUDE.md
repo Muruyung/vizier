@@ -195,6 +195,8 @@ The website is the submodule `vizier-lab/landing`, an Astro 7 + Starlight site s
 
 **Deploy.** Push to `landing` master deploys that repo's Pages site. A vizier release dispatches `repository_dispatch` type `vizier-release` to `vizier-lab/landing` with `{version, ref}` (the release tag), so the site shows that version and its docs. `vizier` needs the `LANDING_DISPATCH_TOKEN` secret (fine-grained PAT, `landing`, Contents read/write). `SITE_URL` and `BASE_PATH` come from `actions/configure-pages`, so the same build works at `vizier-lab.github.io/landing/` and `www.vizier.rs`. The deploy workflow is `.github/workflows/deploy.yml` in the landing repo. `book.vizier.rs` stays on this repo's Pages: `.github/workflows/deploy-docs-redirect.yml` replaces the old mdBook artifact with a redirect to `/docs` (run it by hand at cutover). See `landing/README.md`.
 
+**The catalogue ships with the site.** `design/` has no Pages site of its own: every landing deploy builds `storybook-static/` from `vizier-lab/design` (the dispatched `client_payload.sha`, or `master` otherwise — deliberately not vizier's pin) and copies it to `dist/design/`, published at `www.vizier.rs/design`. A design push dispatches `repository_dispatch` type `design-updated` with `{sha}` from `design/.github/workflows/deploy-storybook.yml`, which needs the same kind of `LANDING_DISPATCH_TOKEN` secret in the design repo. Because the catalogue is built inside the site deploy, a story that fails to build fails the website deploy rather than publishing half a site.
+
 <!-- SPECKIT START -->
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan:

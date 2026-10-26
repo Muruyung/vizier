@@ -29,6 +29,11 @@ in `landing/src/content/blog/`. The site is deployed to www.vizier.rs from the
 [`landing`](https://github.com/vizier-lab/landing) repository, and a vizier
 release dispatches a deploy with the release tag.
 
+The design system's Storybook catalogue is published with the same site, at
+[www.vizier.rs/design](https://www.vizier.rs/design). A push to `design` master
+dispatches a landing deploy that rebuilds the catalogue from that commit, so the
+catalogue tracks the current design rather than vizier's submodule pin.
+
 ## Working on the WebUI
 
 ```sh
