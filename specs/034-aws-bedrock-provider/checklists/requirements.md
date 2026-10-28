@@ -31,7 +31,7 @@
 
 ## Notes
 
-- The specification names external interface contracts only where they are the requirement itself: AWS Bedrock as the provider, its unified Converse conversation interface, IAM Identity Center device sign-in, credential and environment-variable forms, and error categories. Internal architecture (dialects, traits, storage, modules) is left to planning.
-- The two connections are specified separately so the credential lifecycle, SSO session renewal and the distinct SSO/Bedrock regions stay testable without entangling with the IAM path.
-- All assumptions that bound scope are recorded in the Assumptions section: two provider entries (IAM access key pair; IAM Identity Center device sign-in), one region per connection, a distinct SSO region and Bedrock region, chat plus embeddings and image generation, no TTS/STT (no Bedrock batch API), no streaming, and catalogue-driven chat model discovery.
+- The specification names external interface contracts only where they are the requirement itself: AWS Bedrock as the provider, its unified Converse conversation interface, the AWS CLI's SSO profile and credential export, credential and environment-variable forms, and error categories. Internal architecture (dialects, traits, storage, modules) is left to planning.
+- The two connections are specified separately so the stored-IAM-key lifecycle and the AWS-CLI-managed SSO lifecycle stay testable without entangling with each other.
+- All assumptions that bound scope are recorded in the Assumptions section: two provider entries (IAM access key pair; AWS CLI profile signed in with IAM Identity Center), no SSO tokens stored by Vizier, one region per connection, the CLI prerequisite and manual `aws sso login` re-login, chat plus embeddings and image generation, no TTS/STT (no Bedrock batch API), no streaming, and catalogue-driven chat model discovery.
 - No clarification markers were needed; each ambiguous area had a defensible default recorded as an assumption.
