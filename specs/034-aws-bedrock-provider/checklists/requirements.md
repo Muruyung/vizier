@@ -1,4 +1,4 @@
-# Specification Quality Checklist: AWS Bedrock Providers
+# Specification Quality Checklist: AWS Bedrock Provider
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-10-28
@@ -31,7 +31,6 @@
 
 ## Notes
 
-- The specification names external interface contracts only where they are the requirement itself: AWS Bedrock as the provider, its unified Converse conversation interface, the AWS CLI's SSO profile and credential export, credential and environment-variable forms, and error categories. Internal architecture (dialects, traits, storage, modules) is left to planning.
-- The two connections are specified separately so the stored-IAM-key lifecycle and the AWS-CLI-managed SSO lifecycle stay testable without entangling with each other.
-- All assumptions that bound scope are recorded in the Assumptions section: two provider entries (IAM access key pair; AWS CLI profile signed in with IAM Identity Center), no SSO tokens stored by Vizier, one region per connection, the CLI prerequisite and manual `aws sso login` re-login, chat plus embeddings and image generation, no TTS/STT (no Bedrock batch API), no streaming, and catalogue-driven chat model discovery.
+- The specification names external interface contracts only where they are the requirement itself: AWS Bedrock as the provider, its unified Converse conversation interface, its credential and environment-variable forms, and its error categories. Internal architecture (dialects, traits, storage, modules) is left to planning.
+- All assumptions that bound scope are recorded in the Assumptions section: IAM access key pair only (no Bedrock API keys or AWS credential chain), one region per installation, chat plus embeddings and image generation, no TTS/STT (no Bedrock batch API), no streaming, and catalogue-driven chat model discovery.
 - No clarification markers were needed; each ambiguous area had a defensible default recorded as an assumption.
