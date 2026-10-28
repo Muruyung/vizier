@@ -32,5 +32,5 @@
 ## Notes
 
 - The specification names external interface contracts only where they are the requirement itself: AWS Bedrock as the provider, its unified Converse conversation interface, its credential and environment-variable forms, and its error categories. Internal architecture (dialects, traits, storage, modules) is left to planning.
-- All assumptions that bound scope are recorded in the Assumptions section: two static authentication methods, no AWS credential chain, one region per installation, chat only, no streaming, catalogue-driven model discovery.
+- All assumptions that bound scope are recorded in the Assumptions section: IAM access key pair only (no Bedrock API keys or AWS credential chain), one region per installation, chat plus embeddings and image generation, no TTS/STT (no Bedrock batch API), no streaming, and catalogue-driven chat model discovery.
 - No clarification markers were needed; each ambiguous area had a defensible default recorded as an assumption.
