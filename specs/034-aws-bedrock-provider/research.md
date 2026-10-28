@@ -213,7 +213,7 @@ Links: AWS IAM users, Bedrock model access, AWS supported models, and `https://w
 **Verification plan** (detailed in [quickstart.md](./quickstart.md)):
 
 - **Offline**: `cargo test` (SigV4 vectors, dialect, resolver, credentials, encryption, embeddings/images, index guard), `cargo clippy`, `npm test`, `npm run typecheck`; `GET /catalogue/providers` shows Bedrock with four fields and the guide; `PUT /providers/amazon-bedrock` accepts/masks values; startup logs/connection attempts show no AWS traffic; a dummyplug agent still answers.
-- **Live AWS (marked)**: create an IAM user with the policy, enable a chat model, Nova Canvas and Titan Text Embeddings V2; connect, Test (model count), chat, tool call, image, memory write/search, usage/cost; negative checks for a missing secret, missing region, wrong region, model access and bearer-only config. Also verify the exact signed request works (no signature mismatch) and that a cross-region profile id is sent unchanged.
+- **Live AWS (volunteer, marked)**: the project has no Bedrock account. A volunteer with access runs the special-release checklist: create an IAM user with the policy, enable a chat model, Nova Canvas and Titan Text Embeddings V2; connect, Test (model count), chat, tool call, image, memory write/search, usage/cost; negative checks for a missing secret, missing region, wrong region, model access and bearer-only config; verify the exact signed request works (no signature mismatch) and that a cross-region profile id is sent unchanged. This is a release gate, not a CI job.
 
 **Risks and mitigations**:
 

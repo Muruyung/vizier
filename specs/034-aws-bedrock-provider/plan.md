@@ -24,7 +24,7 @@ Five decisions carry the plan (details in [research.md](./research.md)):
 
 **Storage**: Embedded SQLite, no schema change. The four credential fields live in the existing `provider_config` JSON blob; `secret_access_key` and `session_token` are added to the existing field-level encryption path, while `access_key_id` and `region` stay readable identifiers. Existing rows load with the new fields absent. Agent configuration needs no migration: the embedding and image provider enums gain a variant; existing values keep their meaning. No `#82` migration entry.
 
-**Testing**: `cargo test` (SigV4 vectors and canonicalisation, dialect encode/decode, resolver precedence and errors, credential API/masking, encryption of the new fields, embedding/image bodies and parsing, index-dimension guard); `cargo clippy`; `cd webui && npm test` and `npm run typecheck`; end-to-end: the offline form/API/regression checks in [quickstart.md](./quickstart.md) §1–§4, and clearly marked live-AWS steps in §5–§6 for real completion, tools, memory embeddings and image generation. The dummyplug agent is used for the regression slice (existing agent behaviour) and to prove no Bedrock call happens on startup; the live Bedrock paths are marked as live-provider steps because no offline server speaks Bedrock.
+**Testing**: `cargo test` (SigV4 vectors and canonicalisation, dialect encode/decode, resolver precedence and errors, credential API/masking, encryption of the new fields, embedding/image bodies and parsing, index-dimension guard); `cargo clippy`; `cd webui && npm test` and `npm run typecheck`; offline end-to-end: the form/API/error/regression checks in [quickstart.md](./quickstart.md) §1–§4, including a dummyplug agent and a no-AWS-traffic check. **Live Bedrock is not available in-house**: §5–§6 are the volunteer verifier's checklist on the special release (chat, tools, vision, embeddings, images, usage, credential/region errors). No CI job or maintainer run touches AWS.
 
 **Target Platform**: Linux, macOS and Windows via the single binary; modern evergreen browsers for the WebUI. No OS-specific code; SigV4 and the media clients use the existing `reqwest` transport.
 
@@ -35,6 +35,10 @@ Five decisions carry the plan (details in [research.md](./research.md)):
 **Constraints**: zero AWS request at startup, provider/agent build, scheduler or dream (Constitution III, SC-013); one region per saved connection; no streaming; no Bedrock API keys/bearer tokens; no AWS credential chain; embedding and image calls stay outside chat token accounting; secrets never logged; the connect form must work without adding a Bedrock-specific branch; the minimal policy includes `bedrock:ListFoundationModels` because the Test action uses it (spec Assumptions, amended 2026-10-28).
 
 **Scale/Scope**: one provider, three capabilities; 200 catalogue chat models (all regions' entries, cross-region inference profiles included); three embedding model families and two image model families; one new dialect, one signer, two media clients; one provider guide; one docs section; WebUI field/label additions and one guide block.
+
+## Verification & Release Gate
+
+The project has no Bedrock account. CI proves the wire translation, signing, credentials, encryption, UI and the existing agent loop; a maintainer runs the offline form/API/error checks (§1–§4); a volunteer with Bedrock access runs the live checklist (§5–§6) on the special release. The live layer is a **release gate, not a CI gate**: the provider ships as volunteer-verified, and any failure reported there is fixed before it is declared stable. The constitution's dummyplug e2e gate is met for the agent-observable non-Bedrock behaviour (regression and startup), while the real-provider path is the marked live step the constitution allows where behaviour depends on real model output. The limitation is recorded in the spec Assumptions, [research.md](./research.md) R12 and [quickstart.md](./quickstart.md).
 
 ## Constitution Check
 
@@ -47,7 +51,7 @@ Five decisions carry the plan (details in [research.md](./research.md)):
 | **III. Self-contained runtime** | PASS. Signing is in-process; no AWS SDK, sidecar or external service. The connection is opt-in; a fresh install makes no AWS call and needs no AWS configuration. The only network calls are a person's Test, an agent turn, a memory indexing operation or an image call. |
 | **IV. Portability** | PASS. No OS, filesystem or architecture assumptions. `ring` and `chrono` already build for every target in `Cross.toml`; no new native library. |
 | **V. Unified errors & observability** | PASS. Rust paths return `crate::Result`/`LlmError`; provider errors keep AWS's status/body and map into the existing retry classifier. Logging is `tracing`; the new secret fields and the SigV4 `Authorization` header are added to redaction. No `unwrap` outside tests. |
-| **Workflow gates** | PASS. `cargo clippy`, `cargo test`, `npm test`, `npm run typecheck` are in the task list. Agent-observable changes get quickstart steps: dummyplug regression and no-network checks are offline; live Bedrock steps are marked. Docs are required by FR-024. No migration/legacy shim is added, so no `#82` entry. Conventional commits. |
+| **Workflow gates** | PASS with a recorded verification exception. `cargo clippy`, `cargo test`, `npm test`, `npm run typecheck` and the offline quickstart checks are in the task list. The dummyplug regression and no-startup-traffic checks run offline; the live Bedrock path is a volunteer release gate because the project has no Bedrock account (see Verification & Release Gate and Complexity Tracking). Docs are required by FR-024. No migration/legacy shim is added, so no `#82` entry. Conventional commits. |
 
 **Post-design re-check**: no violations. Watch items: (a) SigV4 canonicalisation must match the AWS SDK's label encoding plus double-encoded canonical path — pinned by vectors and a live check; (b) the Test action now uses the control-plane listing, so the documented policy carries `bedrock:ListFoundationModels`; (c) `ToolChoice::None` has no Converse equivalent, so it is sent as the provider default (auto) and documented; (d) the embedding dimension guard is a new cross-provider safety check, so its error text must name the index's size, the model's size and the reindex path.
 
@@ -126,4 +130,8 @@ docs/src/configuration/
 
 ## Complexity Tracking
 
-No violations. No new project, dependency, abstraction layer or migration is added; the one new module (`catalogue/guide.rs`) is static provider metadata.
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|---|---|---|
+| Workflow-gate exception: the live Bedrock path is not exercised in-house | The maintainers have no Bedrock account; a volunteer with access verifies the special release against real AWS (§5–§6 of the quickstart) | Blocking the feature indefinitely on a credential, or shipping without any live verification; a mock cannot validate AWS signing, model access or real provider output. The offline suite and fixtures cover everything else. |
+
+No other violations. No new project, dependency, abstraction layer or migration is added; the one new module (`catalogue/guide.rs`) is static provider metadata.

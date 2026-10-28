@@ -2,7 +2,29 @@
 
 **Feature**: `034-aws-bedrock-provider` | **Plan**: [plan.md](./plan.md) | **Spec**: [spec.md](./spec.md)
 
-Validation runs in two parts: **offline** checks that need no AWS account (§1–§4), and **live AWS** checks that exercise real Bedrock (§5–§6). Live steps are marked **[live]**; never commit the keys used for them.
+Validation runs in two parts: **offline** checks that need no AWS account (§1–§4), and **live AWS** checks that exercise real Bedrock (§5–§6). Live steps are marked **[live]** and are run by a **volunteer verifier on the special release** — the maintainers have no Bedrock account, so §5–§6 are a release checklist, not a CI job. Never commit the keys used for them.
+
+## Verifier report
+
+The volunteer fills this in when the special release is tested; attach it to the release notes or the tracking issue.
+
+| Item | Result / notes |
+|---|---|
+| Build/commit tested | |
+| AWS region | |
+| Chat model(s) enabled | |
+| `bedrock:InvokeModel` + `bedrock:ListFoundationModels` policy in place | |
+| §5.2 Test returned a model count | |
+| §5.3–§5.4 chat and multi-turn | |
+| §5.5 tool call | |
+| §5.6 image input (vision and text-only) | |
+| §5.7 usage/cost | |
+| §6.1–§6.2 embeddings and memory search | |
+| §6.3 wrong embedding model error | |
+| §6.4–§6.5 image generation and size handling | |
+| §6.6 cross-region model id | |
+| §6.7 negative credential/region/model-access checks | |
+| Anything that failed, with the error text | |
 
 ## Prerequisites
 
