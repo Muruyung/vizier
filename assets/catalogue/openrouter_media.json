@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "fetched_at": "2026-10-27T04:17:30Z",
+  "fetched_at": "2026-10-28T02:16:43Z",
   "speech": [
     {"id": "heygen/heygen-voice-1-turbo", "name": "HeyGen: HeyGen Voice Turbo", "voices": ["nadine", "tabitha", "bram", "gareth", "noelle", "meredith", "sabrina", "lucian", "weston", "vincent"]},
     {"id": "heygen/heygen-voice-1-turbo:free", "name": "HeyGen: HeyGen Voice Turbo (free)", "voices": ["nadine", "tabitha", "bram", "gareth", "noelle", "meredith", "sabrina", "lucian", "weston", "vincent"]},

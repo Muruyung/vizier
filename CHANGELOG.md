@@ -2,6 +2,20 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.13.4] - 2026-10-28
+
+### 🚀 Features
+
+- *(cli)* Drop the provider and storage questions from onboard
+- Replace sherpa-onnx with whisper-rs and any-tts (#107)
+
+### ⚙️ Miscellaneous Tasks
+
+- Bump design and webui
+- Bump design and webui
+- Bump webui for notification sound and toast position
+- Bump webui for chat details panel under the header
+- Bump webui for toast position
 ## [0.13.3] - 2026-10-27
 
 ### 🚀 Features
@@ -41,6 +55,7 @@ All notable changes to this project will be documented in this file.
 - Pin dummyplug without workflow
 - Bump dummyplug testing guide
 - Pin full Node dummyplug server
+- Bump version to 0.13.3
 ## [0.13.2] - 2026-10-25
 
 ### 🚀 Features
