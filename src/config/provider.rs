@@ -27,6 +27,8 @@ impl ProviderId {
     pub const GITHUB_COPILOT: ProviderId = ProviderId::new_static("github-copilot");
     pub const AZURE: ProviderId = ProviderId::new_static("azure");
     pub const AMAZON_BEDROCK: ProviderId = ProviderId::new_static("amazon-bedrock");
+    /// Bedrock signed with temporary credentials exported by an AWS CLI SSO profile.
+    pub const AMAZON_BEDROCK_SSO: ProviderId = ProviderId::new_static("amazon-bedrock-sso");
     pub const OPENCODE_GO: ProviderId = ProviderId::new_static("opencode-go");
     pub const OLLAMA: ProviderId = ProviderId::new_static("ollama");
     pub const LLAMA_CPP: ProviderId = ProviderId::new_static("llama-cpp");
@@ -229,7 +231,14 @@ mod provider_id_tests {
             assert!(ProviderId::parse(bad).is_err(), "{bad:?}");
             assert!(serde_json::from_value::<ProviderId>(serde_json::json!(bad)).is_err());
         }
-        for good in ["a", "302ai", "moonshotai-cn", "llama-cpp", "x.y_z", &"x".repeat(64)] {
+        for good in [
+            "a",
+            "302ai",
+            "moonshotai-cn",
+            "llama-cpp",
+            "x.y_z",
+            &"x".repeat(64),
+        ] {
             assert!(ProviderId::parse(good).is_ok(), "{good:?}");
         }
     }

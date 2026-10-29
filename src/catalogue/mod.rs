@@ -80,6 +80,26 @@ pub struct ProviderListing {
     pub fields: Vec<CredentialField>,
 }
 
+/// A separate Bedrock connection which delegates SSO/cache handling to AWS CLI. It intentionally
+/// reuses the catalogue's Bedrock models but never accepts static IAM credentials.
+fn bedrock_sso_listing(data: &CatalogueData) -> ProviderListing {
+    let model_count = data
+        .providers
+        .get(&ProviderId::AMAZON_BEDROCK)
+        .map(|p| p.models.len())
+        .unwrap_or_default();
+    ProviderListing {
+        id: ProviderId::AMAZON_BEDROCK_SSO,
+        name: "Amazon Bedrock (AWS SSO)".into(),
+        origin: ProviderOrigin::Builtin,
+        kind: ProviderKind::Cloud,
+        dialect: Some(DialectKind::Bedrock),
+        model_count,
+        env: vec![],
+        fields: vec![CredentialField::AwsProfile, CredentialField::Region],
+    }
+}
+
 impl Catalogue {
     pub fn new(data: CatalogueData) -> Self {
         Self(
@@ -130,6 +150,12 @@ impl Catalogue {
                 out.push(builtin_listing(b));
             }
         }
+        if !custom
+            .iter()
+            .any(|c| c.id == ProviderId::AMAZON_BEDROCK_SSO)
+        {
+            out.push(bedrock_sso_listing(&data));
+        }
         for p in data.providers.values() {
             let hidden = custom.iter().any(|c| c.id == p.id) || builtin::builtin(&p.id).is_some();
             if !hidden && p.dialect.is_some() {
@@ -140,6 +166,11 @@ impl Catalogue {
     }
 
     pub fn provider(&self, id: &ProviderId) -> Option<CatalogueProvider> {
+        let id = if *id == ProviderId::AMAZON_BEDROCK_SSO {
+            &ProviderId::AMAZON_BEDROCK
+        } else {
+            id
+        };
         self.snapshot().providers.get(id).cloned()
     }
 
@@ -152,22 +183,26 @@ impl Catalogue {
         let mut models: Vec<CatalogueModel> = p
             .models
             .into_values()
-            .filter(|m| all || (m.caps.tool_call != Some(false) && m.status != ModelStatus::Deprecated))
+            .filter(|m| {
+                all || (m.caps.tool_call != Some(false) && m.status != ModelStatus::Deprecated)
+            })
             .collect();
         sort_newest_first(&mut models);
         models
     }
 
     pub fn model(&self, provider: &ProviderId, model: &str) -> Option<CatalogueModel> {
-        self.snapshot()
-            .providers
-            .get(provider)
+        self.provider(provider)
             .and_then(|p| p.models.get(model).cloned())
     }
 
     /// The first catalogue model with this id, preferring a provider that speaks `prefer`
     /// (FR-024: a custom provider's model borrows its limits and capabilities).
-    pub fn find_model_by_id(&self, model: &str, prefer: Option<DialectKind>) -> Option<CatalogueModel> {
+    pub fn find_model_by_id(
+        &self,
+        model: &str,
+        prefer: Option<DialectKind>,
+    ) -> Option<CatalogueModel> {
         let data = self.snapshot();
         let mut fallback = None;
         for p in data.providers.values() {
@@ -292,9 +327,17 @@ mod tests {
     #[test]
     fn the_default_model_list_is_tool_capable_current_and_newest_first() {
         let c = catalogue();
-        let ids: Vec<_> = c.models(&id("acme"), false).into_iter().map(|m| m.id).collect();
+        let ids: Vec<_> = c
+            .models(&id("acme"), false)
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
         assert_eq!(ids, vec!["new", "old", "shared"]);
-        let all: Vec<_> = c.models(&id("acme"), true).into_iter().map(|m| m.id).collect();
+        let all: Vec<_> = c
+            .models(&id("acme"), true)
+            .into_iter()
+            .map(|m| m.id)
+            .collect();
         assert_eq!(all, vec!["gone", "notools", "new", "old", "shared"]);
     }
 
@@ -309,6 +352,26 @@ mod tests {
             .expect("amazon-bedrock is listed");
         assert_eq!(bedrock.dialect, Some(DialectKind::Bedrock));
         assert_eq!(bedrock.model_count, 2);
+        let sso = listed
+            .iter()
+            .find(|p| p.id == ProviderId::AMAZON_BEDROCK_SSO)
+            .expect("amazon-bedrock-sso is listed");
+        assert_eq!(sso.dialect, Some(DialectKind::Bedrock));
+        assert_eq!(sso.model_count, 2);
+        assert_eq!(
+            sso.fields,
+            vec![CredentialField::AwsProfile, CredentialField::Region]
+        );
+        assert_eq!(
+            c.models(&ProviderId::AMAZON_BEDROCK_SSO, false)
+                .into_iter()
+                .map(|m| m.id)
+                .collect::<Vec<_>>(),
+            c.models(&ProviderId::AMAZON_BEDROCK, false)
+                .into_iter()
+                .map(|m| m.id)
+                .collect::<Vec<_>>(),
+        );
         assert!(!listed.iter().any(|p| p.id.as_str() == "galadriel"));
         assert!(listed.iter().any(|p| p.id == ProviderId::DUMMYPLUG));
 
@@ -332,11 +395,17 @@ mod tests {
     fn find_model_by_id_prefers_the_matching_dialect() {
         let c = catalogue();
         assert_eq!(
-            c.find_model_by_id("shared", Some(DialectKind::Anthropic)).unwrap().limit.context,
+            c.find_model_by_id("shared", Some(DialectKind::Anthropic))
+                .unwrap()
+                .limit
+                .context,
             Some(2)
         );
         assert_eq!(
-            c.find_model_by_id("shared", Some(DialectKind::OpenAiChat)).unwrap().limit.context,
+            c.find_model_by_id("shared", Some(DialectKind::OpenAiChat))
+                .unwrap()
+                .limit
+                .context,
             Some(1)
         );
         assert!(c.find_model_by_id("missing", None).is_none());
@@ -356,12 +425,27 @@ mod tests {
     fn agent_warnings_flag_tools_vision_and_unknown_models() {
         let c = catalogue();
         let codes = |cfg| -> Vec<&'static str> {
-            agent_warnings(&c, None, &cfg).into_iter().map(|w| w.code).collect()
+            agent_warnings(&c, None, &cfg)
+                .into_iter()
+                .map(|w| w.code)
+                .collect()
         };
-        assert!(codes(agent_config("acme", "new", true)).is_empty(), "image input unknown counts as supported");
-        assert_eq!(codes(agent_config("acme", "notools", false)), vec!["no_tool_calling"]);
-        assert_eq!(codes(agent_config("acme", "my-unlisted", false)), vec!["unknown_model"]);
-        assert!(codes(agent_config("dummyplug", "dummyplug", false)).is_empty(), "built-ins list live");
+        assert!(
+            codes(agent_config("acme", "new", true)).is_empty(),
+            "image input unknown counts as supported"
+        );
+        assert_eq!(
+            codes(agent_config("acme", "notools", false)),
+            vec!["no_tool_calling"]
+        );
+        assert_eq!(
+            codes(agent_config("acme", "my-unlisted", false)),
+            vec!["unknown_model"]
+        );
+        assert!(
+            codes(agent_config("dummyplug", "dummyplug", false)).is_empty(),
+            "built-ins list live"
+        );
 
         let text_only = Catalogue::new(
             data::parse(br#"{"acme": {"id": "acme", "name": "A", "npm": "@ai-sdk/openai-compatible", "api": "https://a/v1",
@@ -369,7 +453,10 @@ mod tests {
             .unwrap(),
         );
         let w = agent_warnings(&text_only, None, &agent_config("acme", "t", true));
-        assert_eq!(w.iter().map(|w| w.code).collect::<Vec<_>>(), vec!["no_image_input"]);
+        assert_eq!(
+            w.iter().map(|w| w.code).collect::<Vec<_>>(),
+            vec!["no_image_input"]
+        );
         assert!(agent_warnings(&text_only, None, &agent_config("acme", "t", false)).is_empty());
     }
 
@@ -428,7 +515,11 @@ pub fn agent_warnings(
     }
     let read_image = &config.tools.read_image;
     let explicit_vision = read_image.settings.provider.is_some()
-        && read_image.settings.model.as_deref().is_some_and(|m| !m.trim().is_empty());
+        && read_image
+            .settings
+            .model
+            .as_deref()
+            .is_some_and(|m| !m.trim().is_empty());
     if read_image.enabled && !explicit_vision && image_input == Some(false) {
         out.push(AgentWarning {
             code: "no_image_input",

@@ -6,8 +6,8 @@ use crate::{
     dependencies::VizierDependencies,
     llm::media::{
         self,
-        cohere::CohereEmbeddings,
         bedrock::BedrockEmbeddings,
+        cohere::CohereEmbeddings,
         gemini::{GeminiEmbeddings, gemini_dimensions},
         ollama::OllamaEmbeddings,
         openai_shaped::{OpenAiEmbeddings, openai_dimensions},
@@ -41,12 +41,17 @@ impl VizierEmbedder {
 
         let provider = &settings.provider;
         let mut model = settings.model.clone();
-        if *provider == EmbeddingProvider::Bedrock && model.trim().is_empty() {
+        if matches!(
+            provider,
+            EmbeddingProvider::Bedrock | EmbeddingProvider::BedrockSso
+        ) && model.trim().is_empty()
+        {
             model = crate::llm::media::bedrock::DEFAULT_EMBEDDING_MODEL.to_string();
         }
         let Some(id) = provider.credentials() else {
-            let variant = crate::config::embedding::LocalEmbeddingModelVariant::from_name(&model)
-                .ok_or_else(|| anyhow::anyhow!("unknown local embedding model: {model}"))?;
+            let variant =
+                crate::config::embedding::LocalEmbeddingModelVariant::from_name(&model)
+                    .ok_or_else(|| anyhow::anyhow!("unknown local embedding model: {model}"))?;
             return Ok(Self::build(fastembed::LocalEmbedder::new(
                 &variant.to_fastembed(),
                 workspace,
@@ -77,13 +82,17 @@ impl VizierEmbedder {
                 endpoint,
                 input_type: "search_document",
             }),
-            EmbeddingProvider::Bedrock => Self::build(BedrockEmbeddings::new(endpoint)?),
+            EmbeddingProvider::Bedrock | EmbeddingProvider::BedrockSso => {
+                Self::build(BedrockEmbeddings::new(endpoint)?)
+            }
             // rig 0.39 sent `dimensions` for the OpenAI models it knew, by name, on OpenAI and
             // Copilot only.
-            EmbeddingProvider::Openai | EmbeddingProvider::Copilot => Self::build(OpenAiEmbeddings {
-                dimensions: openai_dimensions(&model),
-                endpoint,
-            }),
+            EmbeddingProvider::Openai | EmbeddingProvider::Copilot => {
+                Self::build(OpenAiEmbeddings {
+                    dimensions: openai_dimensions(&model),
+                    endpoint,
+                })
+            }
             _ => Self::build(OpenAiEmbeddings {
                 endpoint,
                 dimensions: None,

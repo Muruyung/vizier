@@ -41,7 +41,13 @@ pub const BEDROCK_POLICY: &str = "{\n  \"Version\": \"2012-10-17\",\n  \"Stateme
 
 /// The guide for a provider, if it has one. Only Amazon Bedrock has one today.
 pub fn for_provider(id: &ProviderId) -> Option<ProviderGuide> {
-    (*id == ProviderId::AMAZON_BEDROCK).then(bedrock)
+    if *id == ProviderId::AMAZON_BEDROCK {
+        Some(bedrock())
+    } else if *id == ProviderId::AMAZON_BEDROCK_SSO {
+        Some(bedrock_sso())
+    } else {
+        None
+    }
 }
 
 fn step(title: &str, body: &str) -> GuideStep {
@@ -55,6 +61,48 @@ fn link(label: &str, url: &str) -> GuideLink {
     GuideLink {
         label: label.into(),
         url: url.into(),
+    }
+}
+
+fn bedrock_sso() -> ProviderGuide {
+    ProviderGuide {
+        intro: "Use an AWS CLI profile authenticated through IAM Identity Center (AWS SSO).".into(),
+        steps: vec![
+            step(
+                "Configure an SSO profile",
+                "Run `aws configure sso` and choose the AWS account, permission set and region that can use Bedrock.",
+            ),
+            step(
+                "Sign in on this machine",
+                "Run `aws sso login --profile <profile>` as the operating-system user that runs Vizier. Vizier never reads or stores the SSO cache.",
+            ),
+            step(
+                "Enter the profile",
+                "Enter that AWS CLI profile name and the Bedrock region below. Vizier obtains short-lived role credentials only when signing a request.",
+            ),
+            step(
+                "Enable model access",
+                "Bedrock → Model access: enable the chat, embedding and image models you will use. Anthropic models may need a use-case form.",
+            ),
+        ],
+        policy: GuidePolicy {
+            language: "json".into(),
+            code: BEDROCK_POLICY.into(),
+        },
+        links: vec![
+            link(
+                "AWS CLI SSO",
+                "https://docs.aws.amazon.com/cli/latest/userguide/sso-configure-profile-token.html",
+            ),
+            link(
+                "Bedrock model access",
+                "https://console.aws.amazon.com/bedrock/home#/modelaccess",
+            ),
+            link(
+                "Vizier provider docs",
+                "https://www.vizier.rs/docs/configuration/providers#amazon-bedrock-sso",
+            ),
+        ],
     }
 }
 
@@ -116,6 +164,18 @@ fn bedrock() -> ProviderGuide {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bedrock_sso_has_the_same_permission_guide() {
+        let guide = for_provider(&ProviderId::AMAZON_BEDROCK_SSO).unwrap();
+        assert!(guide.intro.contains("AWS CLI"));
+        assert!(
+            guide
+                .steps
+                .iter()
+                .any(|step| step.body.contains("aws sso login"))
+        );
+    }
 
     #[test]
     fn only_bedrock_has_a_guide_and_it_carries_the_exact_policy() {

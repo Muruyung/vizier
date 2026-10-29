@@ -48,7 +48,10 @@ pub fn catalogue(state: HTTPState) -> Router<HTTPState> {
         .route_layer(middleware::from_fn_with_state(state.clone(), require_auth));
     let admin = Router::new()
         .route("/refresh", axum::routing::post(refresh))
-        .route("/media-models/{capability}/refresh", axum::routing::post(refresh_media))
+        .route(
+            "/media-models/{capability}/refresh",
+            axum::routing::post(refresh_media),
+        )
         .route_layer(middleware::from_fn_with_state(
             PermissionState {
                 permission: "settings:providers".to_string(),
@@ -158,8 +161,12 @@ pub async fn media_models(
     let Some(capability) = query.capability.as_deref().and_then(parse_capability) else {
         return err_response(StatusCode::BAD_REQUEST, UNKNOWN_CAPABILITY.into());
     };
-    state.catalogue.media().maybe_refresh(&state.deps, capability);
-    api_response(StatusCode::OK, MediaModels::build(&state, capability))}
+    state
+        .catalogue
+        .media()
+        .maybe_refresh(&state.deps, capability);
+    api_response(StatusCode::OK, MediaModels::build(&state, capability))
+}
 
 #[utoipa::path(
     post,
@@ -200,7 +207,9 @@ pub async fn refresh_media(
     path = "/catalogue",
     responses((status = 200, description = "Catalogue status", body = APIResponse<CatalogueStatus>))
 )]
-pub async fn catalogue_status(State(state): State<HTTPState>) -> models::response::Response<CatalogueStatus> {
+pub async fn catalogue_status(
+    State(state): State<HTTPState>,
+) -> models::response::Response<CatalogueStatus> {
     crate::catalogue::refresh::maybe_refresh(&state.deps);
     api_response(StatusCode::OK, status(&state))
 }
@@ -247,9 +256,22 @@ pub struct ProvidersQuery {
 
 /// Providers whose credentials a media or embedding feature uses (data-model §8).
 const MEDIA_PROVIDERS: &[&str] = &[
-    "openai", "google", "togetherai", "github-copilot", "groq", "mistral", "cohere",
-    "openrouter", "huggingface", "xai", "elevenlabs", "voyageai", "hyperbolic", "ollama",
+    "openai",
+    "google",
+    "togetherai",
+    "github-copilot",
+    "groq",
+    "mistral",
+    "cohere",
+    "openrouter",
+    "huggingface",
+    "xai",
+    "elevenlabs",
+    "voyageai",
+    "hyperbolic",
+    "ollama",
     "amazon-bedrock",
+    "amazon-bedrock-sso",
 ];
 
 pub(crate) fn logo_url(id: &str) -> Option<String> {
@@ -260,7 +282,8 @@ pub(crate) fn logo_url(id: &str) -> Option<String> {
 /// renders black, so the WebUI inverts them on a dark theme.
 pub(crate) fn logo_full_color(id: &str) -> bool {
     seed::seed_logo(id).is_some_and(|svg| {
-        !svg.windows(b"currentColor".len()).any(|w| w == b"currentColor")
+        !svg.windows(b"currentColor".len())
+            .any(|w| w == b"currentColor")
     })
 }
 
@@ -289,7 +312,10 @@ pub(crate) async fn connections(
                     crate::provider_keys::credentials_from_env(&p.id, &p.env)
                         .map(|(_, origin)| origin.label())
                 };
-                Connection { status: "connected".into(), source }
+                Connection {
+                    status: "connected".into(),
+                    source,
+                }
             } else if p.origin == ProviderOrigin::Custom || p.kind == ProviderKind::Local {
                 Connection {
                     status: "connected".into(),
@@ -318,14 +344,23 @@ pub(crate) async fn connections(
 }
 
 pub(crate) async fn provider_summaries(state: &HTTPState) -> Vec<ProviderSummary> {
-    let custom = state.storage.list_custom_providers().await.unwrap_or_default();
+    let custom = state
+        .storage
+        .list_custom_providers()
+        .await
+        .unwrap_or_default();
     let listings = state.catalogue.providers(&custom);
     let mut connections = connections(state, &listings).await;
     let snapshot = state.catalogue.snapshot();
     let mut out: Vec<ProviderSummary> = listings
         .into_iter()
         .map(|p| {
-            let entry = snapshot.providers.get(&p.id);
+            let catalogue_id = if p.id == ProviderId::AMAZON_BEDROCK_SSO {
+                &ProviderId::AMAZON_BEDROCK
+            } else {
+                &p.id
+            };
+            let entry = snapshot.providers.get(catalogue_id);
             let endpoint = custom
                 .iter()
                 .find(|c| c.id == p.id)
@@ -348,8 +383,8 @@ pub(crate) async fn provider_summaries(state: &HTTPState) -> Vec<ProviderSummary
                 source: None,
             });
             ProviderSummary {
-                logo: logo_url(p.id.as_str()),
-                logo_full_color: logo_full_color(p.id.as_str()),
+                logo: logo_url(catalogue_id.as_str()),
+                logo_full_color: logo_full_color(catalogue_id.as_str()),
                 popular: POPULAR.contains(&p.id.as_str()),
                 name: if p.id == ProviderId::DUMMYPLUG {
                     "dummyplug (testing)".into()
@@ -396,18 +431,23 @@ pub async fn list_providers(
     Query(query): Query<ProvidersQuery>,
 ) -> models::response::Response<Vec<ProviderSummary>> {
     crate::catalogue::refresh::maybe_refresh(&state.deps);
-    let q = query.q.as_deref().map(str::to_lowercase).filter(|q| !q.is_empty());
+    let q = query
+        .q
+        .as_deref()
+        .map(str::to_lowercase)
+        .filter(|q| !q.is_empty());
     let providers = provider_summaries(&state)
         .await
         .into_iter()
         .filter(|p| {
-            q.as_deref().is_none_or(|q| {
-                p.name.to_lowercase().contains(q) || p.id.as_str().contains(q)
-            })
+            q.as_deref()
+                .is_none_or(|q| p.name.to_lowercase().contains(q) || p.id.as_str().contains(q))
         })
         .filter(|p| match query.kind.as_deref() {
             Some("chat") => p.dialect.is_some(),
-            Some("media") => p.kind == ProviderKind::Media || MEDIA_PROVIDERS.contains(&p.id.as_str()),
+            Some("media") => {
+                p.kind == ProviderKind::Media || MEDIA_PROVIDERS.contains(&p.id.as_str())
+            }
             Some("local") => p.kind == ProviderKind::Local,
             Some("custom") => p.origin == ProviderOrigin::Custom,
             _ => true,
@@ -517,19 +557,33 @@ pub(crate) fn custom_models(state: &HTTPState, custom: &CustomProvider) -> Vec<M
             let borrowed = state.catalogue.find_model_by_id(&row.id, Some(prefer));
             let mut filled = vec![];
             let mut pick = |own: Option<u64>, theirs: Option<u64>, name: &str| {
-                own.or_else(|| {
-                    theirs.inspect(|_| filled.push(name.to_string()))
-                })
+                own.or_else(|| theirs.inspect(|_| filled.push(name.to_string())))
             };
             let b = borrowed.as_ref();
-            let context = pick(row.context, b.and_then(|m| m.limit.input.or(m.limit.context)), "limit.context");
+            let context = pick(
+                row.context,
+                b.and_then(|m| m.limit.input.or(m.limit.context)),
+                "limit.context",
+            );
             let output = pick(row.output, b.and_then(|m| m.limit.output), "limit.output");
             let mut flag = |own: Option<bool>, theirs: Option<bool>, name: &str| {
                 own.or_else(|| theirs.inspect(|_| filled.push(name.to_string())))
             };
-            let tool_call = flag(row.tool_call, b.and_then(|m| m.caps.tool_call), "caps.tool_call");
-            let image_input = flag(row.image_input, b.and_then(|m| m.caps.image_input()), "caps.image_input");
-            let reasoning = flag(row.reasoning, b.and_then(|m| m.caps.reasoning), "caps.reasoning");
+            let tool_call = flag(
+                row.tool_call,
+                b.and_then(|m| m.caps.tool_call),
+                "caps.tool_call",
+            );
+            let image_input = flag(
+                row.image_input,
+                b.and_then(|m| m.caps.image_input()),
+                "caps.image_input",
+            );
+            let reasoning = flag(
+                row.reasoning,
+                b.and_then(|m| m.caps.reasoning),
+                "caps.reasoning",
+            );
             ModelSummary {
                 id: row.id.clone(),
                 name: b.map(|m| m.name.clone()).unwrap_or_else(|| row.id.clone()),
@@ -575,7 +629,11 @@ async fn live_models(state: &HTTPState, provider: &ProviderId) -> Vec<crate::llm
         .unwrap_or_default()
 }
 
-pub(crate) async fn models_for(state: &HTTPState, id: &ProviderId, all: bool) -> Option<Vec<ModelSummary>> {
+pub(crate) async fn models_for(
+    state: &HTTPState,
+    id: &ProviderId,
+    all: bool,
+) -> Option<Vec<ModelSummary>> {
     if let Ok(Some(custom)) = state.storage.get_custom_provider(id).await {
         return Some(custom_models(state, &custom));
     }
@@ -680,7 +738,9 @@ pub async fn get_model(
         (status = 502, description = "The check failed; the previous catalogue stays in use", body = APIResponse<String>)
     )
 )]
-pub async fn refresh(State(state): State<HTTPState>) -> models::response::Response<CatalogueStatus> {
+pub async fn refresh(
+    State(state): State<HTTPState>,
+) -> models::response::Response<CatalogueStatus> {
     use crate::catalogue::refresh::{RefreshError, refresh_now};
     match refresh_now(&state.deps).await {
         Ok(()) => api_response(StatusCode::OK, status(&state)),
@@ -695,12 +755,18 @@ pub async fn refresh(State(state): State<HTTPState>) -> models::response::Respon
 fn svg_response(svg: Vec<u8>) -> Response {
     let mut response = (StatusCode::OK, svg).into_response();
     let headers = response.headers_mut();
-    headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("image/svg+xml"));
+    headers.insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static("image/svg+xml"),
+    );
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
         HeaderValue::from_static("default-src 'none'; style-src 'unsafe-inline'"),
     );
-    headers.insert(header::X_CONTENT_TYPE_OPTIONS, HeaderValue::from_static("nosniff"));
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
     headers.insert(
         header::CACHE_CONTROL,
         HeaderValue::from_static("public, max-age=86400"),
@@ -718,7 +784,10 @@ fn svg_response(svg: Vec<u8>) -> Response {
     )
 )]
 pub async fn logo(State(state): State<HTTPState>, Path(file): Path<String>) -> Response {
-    let Some(id) = file.strip_suffix(".svg").filter(|id| ProviderId::is_valid(id)) else {
+    let Some(id) = file
+        .strip_suffix(".svg")
+        .filter(|id| ProviderId::is_valid(id))
+    else {
         return StatusCode::NOT_FOUND.into_response();
     };
     match crate::catalogue::refresh::logo(&state.deps, id).await {
@@ -743,7 +812,10 @@ mod tests {
         for bad in ["", "video", "Speech", " speech", "images"] {
             assert!(parse_capability(bad).is_none(), "{bad} parsed");
         }
-        assert_eq!(UNKNOWN_CAPABILITY, "capability must be one of: speech, transcription, image");
+        assert_eq!(
+            UNKNOWN_CAPABILITY,
+            "capability must be one of: speech, transcription, image"
+        );
     }
 
     /// FR-008/FR-023: the documented default is always visible, even when a refresh retired it.
@@ -775,7 +847,9 @@ mod tests {
             workspace: dir.path().to_string_lossy().to_string(),
             ..Default::default()
         };
-        let deps = crate::dependencies::VizierDependencies::new(config).await.unwrap();
+        let deps = crate::dependencies::VizierDependencies::new(config)
+            .await
+            .unwrap();
         let state = HTTPState {
             config: deps.config.clone(),
             transport: deps.transport.clone(),
@@ -783,18 +857,24 @@ mod tests {
             background_jobs: deps.background_jobs.clone(),
             catalogue: deps.catalogue.clone(),
             deps,
-            client_events: std::sync::Arc::new(crate::channels::http::rate_limit::RateLimiter::new(
-                10,
-                std::time::Duration::from_secs(60),
-            )),
-            client_state_saves: std::sync::Arc::new(crate::channels::http::rate_limit::RateLimiter::new(
-                2,
-                std::time::Duration::from_secs(1),
-            )),
-            visit_throttle: std::sync::Arc::new(crate::channels::http::rate_limit::RateLimiter::new(
-                1,
-                std::time::Duration::from_secs(60),
-            )),
+            client_events: std::sync::Arc::new(
+                crate::channels::http::rate_limit::RateLimiter::new(
+                    10,
+                    std::time::Duration::from_secs(60),
+                ),
+            ),
+            client_state_saves: std::sync::Arc::new(
+                crate::channels::http::rate_limit::RateLimiter::new(
+                    2,
+                    std::time::Duration::from_secs(1),
+                ),
+            ),
+            visit_throttle: std::sync::Arc::new(
+                crate::channels::http::rate_limit::RateLimiter::new(
+                    1,
+                    std::time::Duration::from_secs(60),
+                ),
+            ),
             deferred_client_calls: Default::default(),
         };
         (state, dir)
@@ -822,15 +902,33 @@ mod tests {
         );
         assert!(!bedrock.fields.contains(&CredentialField::ApiKey));
         assert_eq!(bedrock.dialect, Some(DialectKind::Bedrock));
-        assert!(bedrock.model_count > 100, "the catalogue's Bedrock models are listed");
-        for name in ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION", "AWS_SESSION_TOKEN", "AWS_DEFAULT_REGION"] {
-            assert!(bedrock.env.iter().any(|e| e == name), "{name} missing from {:?}", bedrock.env);
+        assert!(
+            bedrock.model_count > 100,
+            "the catalogue's Bedrock models are listed"
+        );
+        for name in [
+            "AWS_ACCESS_KEY_ID",
+            "AWS_SECRET_ACCESS_KEY",
+            "AWS_REGION",
+            "AWS_SESSION_TOKEN",
+            "AWS_DEFAULT_REGION",
+        ] {
+            assert!(
+                bedrock.env.iter().any(|e| e == name),
+                "{name} missing from {:?}",
+                bedrock.env
+            );
         }
         let guide = bedrock.guide.as_ref().expect("Bedrock has a setup guide");
         assert_eq!(guide.steps.len(), 5);
         assert!(guide.policy.code.contains("bedrock:InvokeModel"));
         assert!(guide.policy.code.contains("bedrock:ListFoundationModels"));
-        assert!(guide.links.iter().any(|l| l.url.ends_with("#amazon-bedrock")));
+        assert!(
+            guide
+                .links
+                .iter()
+                .any(|l| l.url.ends_with("#amazon-bedrock"))
+        );
         assert!(
             summaries
                 .iter()

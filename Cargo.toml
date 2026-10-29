@@ -58,6 +58,7 @@ tokio = { version = "1.49.0", features = [
   "macros",
   "signal",
   "net",
+  "process",
   "sync",
 ] }
 uuid = { version = "1.21.0", features = ["serde", "v4"] }

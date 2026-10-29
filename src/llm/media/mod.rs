@@ -14,10 +14,10 @@ pub use openai_shaped::Endpoint;
 #[cfg(test)]
 pub(crate) mod golden_tests;
 
+use crate::VizierError;
 use crate::config::provider::ProviderId;
 use crate::dependencies::VizierDependencies;
 use crate::llm::auth::{CopilotExchange, CredentialSource, KeyStyle, StaticKey};
-use crate::VizierError;
 
 /// The API root each curated media provider is called at (contract `provider-layer.md` §
 /// Media). Media providers stay curated (FR-016), so this is a table, not catalogue data.
@@ -65,26 +65,34 @@ pub async fn endpoint(
     id: &ProviderId,
     model: String,
 ) -> crate::Result<Endpoint> {
-    if *id == ProviderId::AMAZON_BEDROCK {
-        // One saved connection (access key pair + region) serves embeddings and images; the
-        // same region/pair rules as the chat resolver decide the host (research R6/R7).
+    if *id == ProviderId::AMAZON_BEDROCK || *id == ProviderId::AMAZON_BEDROCK_SSO {
+        // Both Bedrock connections share the regional endpoint; static uses saved access keys and
+        // SSO obtains temporary keys from AWS CLI only when a request is made.
         let env = crate::llm::resolve::provider_env(&deps.catalogue, id);
         let credentials = crate::provider_keys::resolve_credentials(&deps.storage, id, &env)
             .await
             .map(|(c, _)| c)
             .unwrap_or_default();
         let region = crate::llm::resolve::bedrock_region(&credentials)?;
-        let (access_key_id, secret_access_key, session_token) =
-            crate::llm::resolve::bedrock_keys(&credentials)?;
-        return Ok(Endpoint {
-            http: deps.http.clone(),
-            base_url: crate::llm::bedrock::runtime_endpoint(&region),
-            credential: crate::llm::auth::SigV4Credential::bedrock(
+        let credential = if *id == ProviderId::AMAZON_BEDROCK_SSO {
+            crate::llm::auth::AwsCliSsoCredential::bedrock(
+                crate::llm::resolve::aws_profile(&credentials)?,
+                region.clone(),
+            )
+        } else {
+            let (access_key_id, secret_access_key, session_token) =
+                crate::llm::resolve::bedrock_keys(&credentials)?;
+            crate::llm::auth::SigV4Credential::bedrock(
                 access_key_id,
                 secret_access_key,
                 session_token,
-                region,
-            ),
+                region.clone(),
+            )
+        };
+        return Ok(Endpoint {
+            http: deps.http.clone(),
+            base_url: crate::llm::bedrock::runtime_endpoint(&region),
+            credential,
             model,
         });
     }

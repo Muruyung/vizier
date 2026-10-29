@@ -148,6 +148,114 @@ impl SigV4Credential {
     }
 }
 
+/// Temporary role credentials emitted by `aws configure export-credentials --format process`.
+/// They are kept only in memory and are never serialised or logged.
+#[derive(Clone, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+struct AwsProcessCredentials {
+    version: u32,
+    access_key_id: String,
+    secret_access_key: String,
+    session_token: String,
+    expiration: chrono::DateTime<chrono::Utc>,
+}
+
+/// IAM Identity Center credentials supplied by an already authenticated AWS CLI profile.
+/// Vizier deliberately delegates parsing the AWS config and SSO cache/refresh protocol to the
+/// CLI, rather than reading its private cache which contains refresh tokens and client secrets.
+pub struct AwsCliSsoCredential {
+    profile: String,
+    region: String,
+    cached: Mutex<Option<AwsProcessCredentials>>,
+}
+
+impl AwsCliSsoCredential {
+    pub fn bedrock(profile: String, region: String) -> Arc<dyn CredentialSource> {
+        Arc::new(Self {
+            profile,
+            region,
+            cached: Mutex::new(None),
+        })
+    }
+
+    async fn credentials(&self) -> Result<AwsProcessCredentials, LlmError> {
+        let mut cached = self.cached.lock().await;
+        let refresh_after = chrono::Utc::now() + chrono::Duration::minutes(5);
+        if let Some(value) = cached
+            .as_ref()
+            .filter(|value| value.expiration > refresh_after)
+        {
+            return Ok(value.clone());
+        }
+        let output = tokio::time::timeout(
+            Duration::from_secs(15),
+            tokio::process::Command::new("aws")
+                .args([
+                    "configure",
+                    "export-credentials",
+                    "--profile",
+                    &self.profile,
+                    "--format",
+                    "process",
+                    "--no-cli-pager",
+                    "--no-cli-auto-prompt",
+                ])
+                .stdin(std::process::Stdio::null())
+                .output(),
+        )
+        .await
+        .map_err(|_| LlmError::Timeout)
+        .and_then(|result| {
+            result.map_err(|e| {
+                LlmError::Config(format!(
+                    "AWS CLI is required for Amazon Bedrock (AWS SSO): {e}"
+                ))
+            })
+        })?;
+        if !output.status.success() {
+            return Err(LlmError::Config(format!(
+                "AWS SSO credentials for profile {:?} are unavailable; run `aws sso login --profile {}` on the machine running Vizier",
+                self.profile, self.profile
+            )));
+        }
+        if output.stdout.len() > 64 * 1024 {
+            return Err(LlmError::Config(
+                "AWS CLI returned an unexpectedly large credential response".into(),
+            ));
+        }
+        let value: AwsProcessCredentials =
+            serde_json::from_slice(&output.stdout).map_err(|_| {
+                LlmError::Config(format!(
+                    "AWS CLI returned invalid credentials for profile {:?}",
+                    self.profile
+                ))
+            })?;
+        if value.version != 1
+            || value.access_key_id.trim().is_empty()
+            || value.secret_access_key.trim().is_empty()
+            || value.session_token.trim().is_empty()
+            || value.expiration <= chrono::Utc::now()
+        {
+            return Err(LlmError::Config(format!(
+                "AWS CLI returned expired or incomplete SSO credentials for profile {:?}; run `aws sso login --profile {}`",
+                self.profile, self.profile
+            )));
+        }
+        *cached = Some(value.clone());
+        Ok(value)
+    }
+}
+
+impl std::fmt::Debug for AwsCliSsoCredential {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("AwsCliSsoCredential")
+            .field("profile", &self.profile)
+            .field("region", &self.region)
+            .field("cached", &"[redacted]")
+            .finish()
+    }
+}
+
 impl std::fmt::Debug for SigV4Credential {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("SigV4Credential")
@@ -211,6 +319,56 @@ impl CredentialSource for SigV4Credential {
     }
 }
 
+#[async_trait::async_trait]
+impl CredentialSource for AwsCliSsoCredential {
+    async fn authorize(
+        &self,
+        _req: RequestBuilder,
+        _info: &RequestInfo,
+    ) -> Result<RequestBuilder, LlmError> {
+        Err(LlmError::Config(
+            "AWS SSO signing requires the request body; use the body-aware path".into(),
+        ))
+    }
+
+    async fn authorize_with_body(
+        &self,
+        req: RequestBuilder,
+        _info: &RequestInfo,
+        method: &str,
+        url: &str,
+        body: &[u8],
+    ) -> Result<RequestBuilder, LlmError> {
+        let credentials = self.credentials().await?;
+        let parsed = reqwest::Url::parse(url)
+            .map_err(|e| LlmError::Config(format!("cannot sign the request URL {url}: {e}")))?;
+        let host = SigV4Credential::sign_host(&parsed)?;
+        let signature = sigv4::sign(&SigV4Request {
+            method,
+            path: parsed.path(),
+            query: parsed.query().unwrap_or(""),
+            host: &host,
+            content_type: Some("application/json"),
+            body,
+            access_key_id: &credentials.access_key_id,
+            secret_access_key: &credentials.secret_access_key,
+            session_token: Some(&credentials.session_token),
+            region: &self.region,
+            service: super::bedrock::SERVICE,
+            now: chrono::Utc::now(),
+        });
+        Ok(req
+            .header(reqwest::header::CONTENT_TYPE, "application/json")
+            .header("x-amz-date", signature.amz_date)
+            .header(reqwest::header::AUTHORIZATION, signature.authorization)
+            .header("x-amz-security-token", credentials.session_token))
+    }
+
+    async fn invalidate(&self) -> bool {
+        self.cached.lock().await.take().is_some()
+    }
+}
+
 // GitHub Copilot. Ported from rig-core 0.39 `providers/copilot`.
 
 pub const COPILOT_API_BASE_URL: &str = "https://api.githubcopilot.com";
@@ -241,7 +399,12 @@ pub struct CopilotExchange {
 
 impl CopilotExchange {
     pub fn new(http: reqwest::Client, key: String, configured_base_url: String) -> Arc<Self> {
-        Self::with_token_url(http, key, configured_base_url, COPILOT_TOKEN_URL.to_string())
+        Self::with_token_url(
+            http,
+            key,
+            configured_base_url,
+            COPILOT_TOKEN_URL.to_string(),
+        )
     }
 
     pub fn with_token_url(
@@ -339,7 +502,11 @@ impl CredentialSource for CopilotExchange {
             .header("x-vscode-user-agent-library-version", "electron-fetch")
             .header(
                 "X-Initiator",
-                if info.agent_initiated { "agent" } else { "user" },
+                if info.agent_initiated {
+                    "agent"
+                } else {
+                    "user"
+                },
             );
         if info.has_images {
             req = req.header("copilot-vision-request", "true");
@@ -517,11 +684,15 @@ mod tests {
 
     #[test]
     fn chatgpt_account_id_is_read_from_the_token() {
-        let claims = serde_json::json!({"https://api.openai.com/auth": {"chatgpt_account_id": "acct_1"}});
+        let claims =
+            serde_json::json!({"https://api.openai.com/auth": {"chatgpt_account_id": "acct_1"}});
         let payload = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(serde_json::to_vec(&claims).unwrap());
         let token = format!("h.{payload}.s");
-        assert_eq!(chatgpt_account_id_from_jwt(&token).as_deref(), Some("acct_1"));
+        assert_eq!(
+            chatgpt_account_id_from_jwt(&token).as_deref(),
+            Some("acct_1")
+        );
         assert_eq!(chatgpt_account_id_from_jwt("opaque"), None);
     }
 
@@ -548,7 +719,13 @@ mod tests {
 
         let req = reqwest::Client::new().post(url);
         let built = credential
-            .authorize_with_body(req, &RequestInfo::default(), "POST", url, br#"{"messages":[]}"#)
+            .authorize_with_body(
+                req,
+                &RequestInfo::default(),
+                "POST",
+                url,
+                br#"{"messages":[]}"#,
+            )
             .await
             .unwrap()
             .build()
@@ -578,6 +755,19 @@ mod tests {
             built.headers().get(reqwest::header::CONTENT_TYPE).unwrap(),
             "application/json"
         );
+    }
+
+    #[test]
+    #[test]
+    fn aws_sso_debug_never_prints_cached_credentials() {
+        let credential = AwsCliSsoCredential {
+            profile: "dev-sso".into(),
+            region: "us-east-1".into(),
+            cached: Mutex::new(None),
+        };
+        let printed = format!("{credential:?}");
+        assert!(printed.contains("dev-sso"));
+        assert!(printed.contains("[redacted]"));
     }
 
     #[test]

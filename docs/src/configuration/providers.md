@@ -117,6 +117,26 @@ The provider's own error is kept and shown:
 
 Rotating keys, changing the region or removing the connection restarts exactly the agents that use Bedrock; their next turn uses the new values without a Vizier restart. Invalid credentials make the agent's health report the failure, and saving working credentials recovers it. Startup, catalogue refresh, the scheduler and dream cycles never make an AWS request.
 
+## Amazon Bedrock (AWS SSO)
+
+**Amazon Bedrock (AWS SSO)** is separate from the static-key **Amazon Bedrock** provider. It obtains short-lived IAM role credentials from an AWS CLI v2 profile after you authenticate it with IAM Identity Center:
+
+```bash
+aws configure sso
+aws sso login --profile my-bedrock-profile
+aws sts get-caller-identity --profile my-bedrock-profile
+```
+
+In Settings → Providers, choose **Amazon Bedrock (AWS SSO)** and enter `aws_profile` (`my-bedrock-profile` above) and its Bedrock `region`. Vizier invokes `aws configure export-credentials --profile my-bedrock-profile --format process` only when it needs to sign a Bedrock request. It does not read `~/.aws/sso/cache`, open a browser, or store the SSO token, refresh token, client secret, access key, secret key, or session token. A credential is retained in process memory only until it is within five minutes of expiry.
+
+The operating-system user that runs Vizier must have AWS CLI v2, the AWS profile and its SSO cache. When the IAM Identity Center session expires, sign in again on that same machine:
+
+```bash
+aws sso login --profile my-bedrock-profile
+```
+
+The SSO profile's permission set needs `bedrock:ListFoundationModels` for **Test** and `bedrock:InvokeModel` for chat, embeddings and image generation. Its model catalogue and typed custom model IDs are shared with Bedrock: an unlisted model id, cross-region inference profile, or model ARN is stored and sent unchanged (except required URL path encoding); AWS validates it. For a server or Docker deployment without interactive CLI login, use the static-key provider or an AWS workload-identity integration instead.
+
 ## Ids from earlier versions
 
 Provider ids now follow the catalogue. The old names are still accepted everywhere (API, agent configs) and are normalised on read, and the environment variables Vizier used before are still honoured:

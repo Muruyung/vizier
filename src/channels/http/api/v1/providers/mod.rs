@@ -67,6 +67,8 @@ pub struct ProviderResponse {
     pub has_session_token: bool,
     /// AWS region, safe to show.
     pub region: Option<String>,
+    /// AWS CLI profile used by the SSO Bedrock provider; safe to show.
+    pub aws_profile: Option<String>,
     /// The pre-015 name this provider's saved row was migrated from.
     pub migrated_from: Option<String>,
     pub used_by: UsedBy,
@@ -90,7 +92,9 @@ async fn connected(state: &HTTPState) -> Vec<ProviderResponse> {
         let used_by = used.remove(&p.id).map(|(u, _)| u).unwrap_or_default();
         let local = p.kind == ProviderKind::Local;
         // A local provider on its default address has no source, but is listed once used.
-        let listed = p.id == ProviderId::DUMMYPLUG || p.connection.source.is_some() || (local && used_by.total() > 0);
+        let listed = p.id == ProviderId::DUMMYPLUG
+            || p.connection.source.is_some()
+            || (local && used_by.total() > 0);
         if !listed {
             continue;
         }
@@ -119,6 +123,7 @@ async fn connected(state: &HTTPState) -> Vec<ProviderResponse> {
             has_secret_access_key: set(&creds.secret_access_key),
             has_session_token: set(&creds.session_token),
             region: creds.region.filter(|v| !v.is_empty()),
+            aws_profile: creds.aws_profile.filter(|v| !v.is_empty()),
             used_by,
             id: p.id,
         });
@@ -181,6 +186,8 @@ pub struct UpsertProviderRequest {
     pub session_token: Option<String>,
     /// AWS region.
     pub region: Option<String>,
+    /// AWS CLI SSO profile for Amazon Bedrock (AWS SSO).
+    pub aws_profile: Option<String>,
 }
 
 impl UpsertProviderRequest {
@@ -197,6 +204,7 @@ impl UpsertProviderRequest {
             (SecretAccessKey, &self.secret_access_key),
             (SessionToken, &self.session_token),
             (Region, &self.region),
+            (AwsProfile, &self.aws_profile),
         ]
         .into_iter()
         .filter(|(_, v)| v.is_some())
@@ -215,6 +223,7 @@ impl UpsertProviderRequest {
             secret_access_key: self.secret_access_key,
             session_token: self.session_token,
             region: self.region,
+            aws_profile: self.aws_profile,
         }
     }
 }
@@ -239,6 +248,7 @@ fn field_name(f: CredentialField) -> &'static str {
         CredentialField::SecretAccessKey => "secret_access_key",
         CredentialField::SessionToken => "session_token",
         CredentialField::Region => "region",
+        CredentialField::AwsProfile => "aws_profile",
     }
 }
 
@@ -248,7 +258,7 @@ fn check_bedrock_pair(
     id: &ProviderId,
     creds: &ProviderCredentials,
 ) -> Result<(), (StatusCode, String)> {
-    if *id != ProviderId::AMAZON_BEDROCK {
+    if *id != ProviderId::AMAZON_BEDROCK && *id != ProviderId::AMAZON_BEDROCK_SSO {
         return Ok(());
     }
     if let Some(region) = creds.region.as_deref().filter(|r| !r.is_empty())
@@ -258,6 +268,11 @@ fn check_bedrock_pair(
             StatusCode::BAD_REQUEST,
             format!("invalid AWS region {region:?}: use a form like us-east-1"),
         ));
+    }
+    if *id == ProviderId::AMAZON_BEDROCK_SSO {
+        return crate::llm::resolve::aws_profile(creds)
+            .map(|_| ())
+            .map_err(|e| (StatusCode::BAD_REQUEST, e.0));
     }
     let has = |v: &Option<String>| v.as_deref().is_some_and(|s| !s.is_empty());
     match (has(&creds.access_key_id), has(&creds.secret_access_key)) {
@@ -280,7 +295,12 @@ fn check_fields(
     sent: &[CredentialField],
     custom: &[crate::schema::CustomProvider],
 ) -> Result<(), (StatusCode, String)> {
-    let Some(listing) = state.catalogue.providers(custom).into_iter().find(|p| p.id == *id) else {
+    let Some(listing) = state
+        .catalogue
+        .providers(custom)
+        .into_iter()
+        .find(|p| p.id == *id)
+    else {
         return Err((
             StatusCode::NOT_FOUND,
             format!("provider \"{id}\" is not available"),
@@ -330,7 +350,11 @@ pub(crate) async fn upsert_provider(
     let Ok(id) = ProviderId::parse(&id) else {
         return err_response(StatusCode::BAD_REQUEST, "invalid provider id".into());
     };
-    let custom = state.storage.list_custom_providers().await.unwrap_or_default();
+    let custom = state
+        .storage
+        .list_custom_providers()
+        .await
+        .unwrap_or_default();
     if let Err((status, message)) = check_fields(&state, &id, &body.sent(), &custom) {
         return err_response(status, message);
     }
@@ -351,6 +375,7 @@ pub(crate) async fn upsert_provider(
             secret_access_key: apply(stored.secret_access_key, body.secret_access_key),
             session_token: apply(stored.session_token, body.session_token),
             region: apply(stored.region, body.region),
+            aws_profile: apply(stored.aws_profile, body.aws_profile),
         },
     };
     if let Err((status, message)) = check_bedrock_pair(&id, &entry.credentials) {
@@ -433,7 +458,10 @@ pub(crate) async fn restart_users(state: &HTTPState, id: &ProviderId) {
             continue;
         }
         if let Ok(crate::schema::AgentCommandResult::Error(e)) = rx.await {
-            tracing::warn!("restarting agent '{}' after a change to '{id}': {e}", agent.id);
+            tracing::warn!(
+                "restarting agent '{}' after a change to '{id}': {e}",
+                agent.id
+            );
         }
     }
 }
@@ -507,7 +535,11 @@ pub(crate) async fn test_provider(
     };
     let custom = state.storage.get_custom_provider(&id).await.ok().flatten();
     if custom.is_none() {
-        let all = state.storage.list_custom_providers().await.unwrap_or_default();
+        let all = state
+            .storage
+            .list_custom_providers()
+            .await
+            .unwrap_or_default();
         if let Err((status, message)) = check_fields(&state, &id, &body.sent(), &all) {
             return err_response(status, message);
         }
@@ -531,9 +563,7 @@ pub(crate) async fn test_provider(
 mod dummyplug_provider_tests {
     use super::*;
     use crate::{
-        config::VizierConfig,
-        dependencies::VizierDependencies,
-        storage::provider::ProviderStorage,
+        config::VizierConfig, dependencies::VizierDependencies, storage::provider::ProviderStorage,
     };
     use std::sync::Arc;
 
@@ -576,7 +606,10 @@ mod dummyplug_provider_tests {
             .into_iter()
             .find(|provider| provider.id == ProviderId::DUMMYPLUG)
             .expect("dummyplug is listed by default");
-        assert_eq!(initial.base_url.as_deref(), Some("http://127.0.0.1:9998/v1"));
+        assert_eq!(
+            initial.base_url.as_deref(),
+            Some("http://127.0.0.1:9998/v1")
+        );
         assert_eq!(initial.fields, vec![CredentialField::BaseUrl]);
 
         let put = upsert_provider(
@@ -589,14 +622,28 @@ mod dummyplug_provider_tests {
         )
         .await;
         assert_eq!(put.0, StatusCode::OK);
-        assert_eq!(put.1.0.data.as_ref().unwrap().base_url.as_deref(), Some("http://127.0.0.1:19998/v1"));
+        assert_eq!(
+            put.1.0.data.as_ref().unwrap().base_url.as_deref(),
+            Some("http://127.0.0.1:19998/v1")
+        );
 
         let get = get_provider(Path("dummyplug".into()), State(state.clone())).await;
         assert_eq!(get.0, StatusCode::OK);
-        assert_eq!(get.1.0.data.as_ref().unwrap().base_url.as_deref(), Some("http://127.0.0.1:19998/v1"));
+        assert_eq!(
+            get.1.0.data.as_ref().unwrap().base_url.as_deref(),
+            Some("http://127.0.0.1:19998/v1")
+        );
 
-        let saved = state.storage.get_provider(&ProviderId::DUMMYPLUG).await.unwrap().unwrap();
-        assert_eq!(saved.credentials.base_url.as_deref(), Some("http://127.0.0.1:19998/v1"));
+        let saved = state
+            .storage
+            .get_provider(&ProviderId::DUMMYPLUG)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(
+            saved.credentials.base_url.as_deref(),
+            Some("http://127.0.0.1:19998/v1")
+        );
     }
 
     #[tokio::test]
@@ -614,13 +661,59 @@ mod dummyplug_provider_tests {
         assert_eq!(put.0, StatusCode::BAD_REQUEST);
     }
 
-    fn body(access: Option<&str>, secret: Option<&str>, region: Option<&str>) -> UpsertProviderRequest {
+    fn body(
+        access: Option<&str>,
+        secret: Option<&str>,
+        region: Option<&str>,
+    ) -> UpsertProviderRequest {
         UpsertProviderRequest {
             access_key_id: access.map(str::to_string),
             secret_access_key: secret.map(str::to_string),
             region: region.map(str::to_string),
             ..Default::default()
         }
+    }
+
+    #[tokio::test]
+    async fn bedrock_sso_saves_a_profile_and_rejects_static_keys() {
+        let (state, _dir) = state().await;
+        let saved = upsert_provider(
+            Path("amazon-bedrock-sso".into()),
+            State(state.clone()),
+            axum::Json(UpsertProviderRequest {
+                aws_profile: Some("engineering-sso".into()),
+                region: Some("ap-southeast-1".into()),
+                ..Default::default()
+            }),
+        )
+        .await;
+        assert_eq!(saved.0, StatusCode::OK, "{:?}", saved.1.0);
+        let data = saved.1.0.data.unwrap();
+        assert_eq!(data.aws_profile.as_deref(), Some("engineering-sso"));
+        assert_eq!(data.region.as_deref(), Some("ap-southeast-1"));
+        assert_eq!(
+            data.fields,
+            vec![CredentialField::AwsProfile, CredentialField::Region]
+        );
+
+        let rejected = upsert_provider(
+            Path("amazon-bedrock-sso".into()),
+            State(state),
+            axum::Json(UpsertProviderRequest {
+                access_key_id: Some("AKIAEXAMPLE".into()),
+                ..Default::default()
+            }),
+        )
+        .await;
+        assert_eq!(rejected.0, StatusCode::BAD_REQUEST);
+        assert!(
+            rejected
+                .1
+                .0
+                .message
+                .unwrap_or_default()
+                .contains("access_key_id")
+        );
     }
 
     #[tokio::test]
@@ -636,22 +729,43 @@ mod dummyplug_provider_tests {
         .await;
         assert_eq!(put.0, StatusCode::BAD_REQUEST);
         assert!(
-            put.1.0.message.as_deref().unwrap_or_default().contains("secret access key"),
+            put.1
+                .0
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("secret access key"),
             "{:?}",
             put.1.0
         );
-        assert!(state.storage.get_provider(&ProviderId::AMAZON_BEDROCK).await.unwrap().is_none());
+        assert!(
+            state
+                .storage
+                .get_provider(&ProviderId::AMAZON_BEDROCK)
+                .await
+                .unwrap()
+                .is_none()
+        );
 
         // A malformed region is refused before any request.
         let put = upsert_provider(
             Path("amazon-bedrock".into()),
             State(state.clone()),
-            axum::Json(body(Some("AKIAEXAMPLE"), Some("secret"), Some("not-a-region"))),
+            axum::Json(body(
+                Some("AKIAEXAMPLE"),
+                Some("secret"),
+                Some("not-a-region"),
+            )),
         )
         .await;
         assert_eq!(put.0, StatusCode::BAD_REQUEST);
         assert!(
-            put.1.0.message.as_deref().unwrap_or_default().contains("invalid AWS region"),
+            put.1
+                .0
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("invalid AWS region"),
             "{:?}",
             put.1.0
         );
@@ -660,7 +774,11 @@ mod dummyplug_provider_tests {
         let put = upsert_provider(
             Path("amazon-bedrock".into()),
             State(state.clone()),
-            axum::Json(body(Some("AKIAEXAMPLE"), Some("secret-access"), Some("us-east-1"))),
+            axum::Json(body(
+                Some("AKIAEXAMPLE"),
+                Some("secret-access"),
+                Some("us-east-1"),
+            )),
         )
         .await;
         assert_eq!(put.0, StatusCode::OK, "{:?}", put.1.0);
@@ -686,22 +804,27 @@ mod dummyplug_provider_tests {
             .await
             .unwrap()
             .unwrap();
-        assert_eq!(stored.credentials.access_key_id.as_deref(), Some("AKIAEXAMPLE"));
+        assert_eq!(
+            stored.credentials.access_key_id.as_deref(),
+            Some("AKIAEXAMPLE")
+        );
         assert_eq!(stored.credentials.region.as_deref(), Some("us-east-1"));
         // The secret is written protected: read the row without the storage decryptor.
-        let raw = crate::storage::sqlite::SqliteStorage::open_connection(
-            dir.path().to_str().unwrap(),
-        )
-        .unwrap()
-        .query_row(
-            "SELECT data FROM provider_config WHERE variant = 'amazon-bedrock'",
-            [],
-            |row| row.get::<_, String>(0),
-        )
-        .unwrap();
+        let raw =
+            crate::storage::sqlite::SqliteStorage::open_connection(dir.path().to_str().unwrap())
+                .unwrap()
+                .query_row(
+                    "SELECT data FROM provider_config WHERE variant = 'amazon-bedrock'",
+                    [],
+                    |row| row.get::<_, String>(0),
+                )
+                .unwrap();
         assert!(raw.contains("enc:v1:"), "{raw}");
         assert!(!raw.contains("secret-access"), "{raw}");
-        assert!(raw.contains("AKIAEXAMPLE"), "the identifier stays readable: {raw}");
+        assert!(
+            raw.contains("AKIAEXAMPLE"),
+            "the identifier stays readable: {raw}"
+        );
 
         let get = get_provider(Path("amazon-bedrock".into()), State(state.clone())).await;
         let json = serde_json::to_value(get.1.0.data.unwrap()).unwrap();
@@ -721,7 +844,12 @@ mod dummyplug_provider_tests {
         .await;
         assert_eq!(put.0, StatusCode::BAD_REQUEST);
         assert!(
-            put.1.0.message.as_deref().unwrap_or_default().contains("does not use api_key"),
+            put.1
+                .0
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("does not use api_key"),
             "{:?}",
             put.1.0
         );
@@ -738,7 +866,12 @@ mod dummyplug_provider_tests {
         .await;
         assert_eq!(put.0, StatusCode::BAD_REQUEST);
         assert!(
-            put.1.0.message.as_deref().unwrap_or_default().contains("does not take a base_url"),
+            put.1
+                .0
+                .message
+                .as_deref()
+                .unwrap_or_default()
+                .contains("does not take a base_url"),
             "{:?}",
             put.1.0
         );
@@ -751,7 +884,14 @@ mod dummyplug_provider_tests {
         )
         .await;
         assert_eq!(deleted.0, StatusCode::OK);
-        assert!(state.storage.get_provider(&ProviderId::AMAZON_BEDROCK).await.unwrap().is_none());
+        assert!(
+            state
+                .storage
+                .get_provider(&ProviderId::AMAZON_BEDROCK)
+                .await
+                .unwrap()
+                .is_none()
+        );
         let get = get_provider(Path("amazon-bedrock".into()), State(state)).await;
         assert_eq!(get.0, StatusCode::NOT_FOUND);
     }

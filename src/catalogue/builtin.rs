@@ -21,6 +21,8 @@ pub enum CredentialField {
     SessionToken,
     /// AWS region (also a Bedrock chat model's region).
     Region,
+    /// Named AWS CLI profile used to export IAM Identity Center credentials.
+    AwsProfile,
 }
 
 #[derive(Debug, Clone)]
@@ -66,7 +68,11 @@ pub fn builtins() -> &'static [BuiltinProvider] {
                 kind: ProviderKind::Cloud,
                 dialect: Some(DialectKind::OpenAiResponses),
                 fields: &[AccessToken, AccountId, BaseUrl],
-                env: &["CHATGPT_ACCESS_TOKEN", "CHATGPT_ACCOUNT_ID", "CHATGPT_API_BASE"],
+                env: &[
+                    "CHATGPT_ACCESS_TOKEN",
+                    "CHATGPT_ACCOUNT_ID",
+                    "CHATGPT_API_BASE",
+                ],
                 default_base_url: Some(CHATGPT_BASE_URL),
             },
             BuiltinProvider {
@@ -120,8 +126,14 @@ mod tests {
 
     #[test]
     fn builtins_are_found_by_id() {
-        assert_eq!(builtin(&ProviderId::OLLAMA).unwrap().kind, ProviderKind::Local);
-        assert_eq!(builtin(&ProviderId::DUMMYPLUG).unwrap().dialect, Some(DialectKind::OpenAiChat));
+        assert_eq!(
+            builtin(&ProviderId::OLLAMA).unwrap().kind,
+            ProviderKind::Local
+        );
+        assert_eq!(
+            builtin(&ProviderId::DUMMYPLUG).unwrap().dialect,
+            Some(DialectKind::OpenAiChat)
+        );
         assert!(builtin(&ProviderId::OPENAI).is_none());
         let mut ids: Vec<_> = builtins().iter().map(|b| b.id.as_str()).collect();
         ids.dedup();

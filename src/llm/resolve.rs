@@ -93,11 +93,11 @@ impl ResolvedModel {
 // Resolution -------------------------------------------------------------------------------------
 
 use super::auth::{ChatGptAccount, CopilotExchange, KeyStyle};
+use crate::VizierError;
 use crate::catalogue::Catalogue;
 use crate::catalogue::builtin::{self, CHATGPT_BASE_URL};
 use crate::catalogue::data::{self as catalogue_data, CatalogueModel, Limits, ProviderKind};
 use crate::schema::provider::{CustomProtocol, CustomProvider, ProviderCredentials};
-use crate::VizierError;
 
 /// The agent's own values, which win over the catalogue's (FR-012).
 #[derive(Debug, Clone, Default)]
@@ -152,7 +152,10 @@ fn expand(template: &str, extra: &[(&str, String)]) -> crate::Result<String> {
 
 /// Context window and output limit from the catalogue, in the research R8 order: `limit.input`
 /// is the real prompt budget where it differs from the context.
-fn limits(overrides: &ModelOverrides, limit: Option<&Limits>) -> (Option<u64>, ContextSource, Option<u64>) {
+fn limits(
+    overrides: &ModelOverrides,
+    limit: Option<&Limits>,
+) -> (Option<u64>, ContextSource, Option<u64>) {
     let catalogue = limit.and_then(|l| l.input.or(l.context));
     let (window, source) = match (overrides.context_window, catalogue) {
         (Some(w), _) => (Some(w), ContextSource::Override),
@@ -203,9 +206,7 @@ fn missing_key(provider: &ProviderId, env: &[String]) -> VizierError {
 }
 
 fn env_non_empty(name: &str) -> Option<String> {
-    std::env::var(name)
-        .ok()
-        .filter(|v| !v.trim().is_empty())
+    std::env::var(name).ok().filter(|v| !v.trim().is_empty())
 }
 
 /// The region a Bedrock connection uses: the saved value, then `AWS_REGION`, then
@@ -234,7 +235,9 @@ pub(crate) fn bedrock_region(creds: &ProviderCredentials) -> crate::Result<Strin
 
 /// The access key pair, refusing a bearer token and an incomplete pair with a message that names
 /// what is missing (FR-005).
-pub(crate) fn bedrock_keys(creds: &ProviderCredentials) -> crate::Result<(String, String, Option<String>)> {
+pub(crate) fn bedrock_keys(
+    creds: &ProviderCredentials,
+) -> crate::Result<(String, String, Option<String>)> {
     let access = creds.access_key_id.as_deref().filter(|v| !v.is_empty());
     let secret = creds.secret_access_key.as_deref().filter(|v| !v.is_empty());
     let bearer = creds.api_key.as_deref().filter(|v| !v.is_empty());
@@ -264,6 +267,36 @@ pub(crate) fn bedrock_keys(creds: &ProviderCredentials) -> crate::Result<(String
         secret.to_string(),
         creds.session_token.clone().filter(|t| !t.is_empty()),
     ))
+}
+
+/// A profile name accepted by the AWS CLI. This is an argument, never a shell fragment.
+pub(crate) fn aws_profile(creds: &ProviderCredentials) -> crate::Result<String> {
+    let profile = creds.aws_profile.as_deref().map(str::trim).filter(|p| !p.is_empty()).ok_or_else(|| {
+        VizierError("no AWS CLI profile for \"amazon-bedrock-sso\": set aws_profile in Settings › Providers, then run `aws sso login --profile <profile>`".into())
+    })?;
+    if profile.len() > 128
+        || !profile.bytes().all(|b| {
+            b.is_ascii_alphanumeric() || matches!(b, b'+' | b'=' | b',' | b'.' | b'@' | b'_' | b'-')
+        })
+    {
+        return Err(VizierError(
+            "invalid AWS CLI profile: use letters, digits, + = , . @ _ or -".into(),
+        ));
+    }
+    Ok(profile.to_string())
+}
+
+fn resolve_bedrock_sso(
+    model: &str,
+    creds: &ProviderCredentials,
+    mut resolved: ResolvedModel,
+) -> crate::Result<ResolvedModel> {
+    let region = bedrock_region(creds)?;
+    let profile = aws_profile(creds)?;
+    resolved.model = model.to_string();
+    resolved.base_url = crate::llm::bedrock::runtime_endpoint(&region);
+    resolved.credential = super::auth::AwsCliSsoCredential::bedrock(profile, region);
+    Ok(resolved)
 }
 
 fn resolve_bedrock(
@@ -298,11 +331,18 @@ pub fn resolve_with(
     if let Some(b) = builtin::builtin(provider) {
         return resolve_builtin(ctx, b, model, overrides);
     }
-    let Some(p) = ctx.catalogue.provider(provider) else {
+    // `amazon-bedrock-sso` is a virtual connection mode over the catalogue's Bedrock models.
+    let catalogue_provider = if *provider == ProviderId::AMAZON_BEDROCK_SSO {
+        &ProviderId::AMAZON_BEDROCK
+    } else {
+        provider
+    };
+    let Some(p) = ctx.catalogue.provider(catalogue_provider) else {
         return Err(not_available(provider));
     };
     let entry = p.models.get(model);
-    let (dialect, api) = catalogue_data::dialect_for(&p, entry).ok_or_else(|| not_available(provider))?;
+    let (dialect, api) =
+        catalogue_data::dialect_for(&p, entry).ok_or_else(|| not_available(provider))?;
     let creds = ctx.credentials.clone().unwrap_or_default();
 
     let mut resolved = base(provider, model, dialect);
@@ -316,8 +356,11 @@ pub fn resolve_with(
         resolved.cost = m.cost.clone();
     }
 
-    // Bedrock signs with an IAM access key pair and talks to a regional host; it has no
-    // `api_key` at all (research R5, contract `provider-layer.md` §4).
+    // The SSO provider reuses the Bedrock dialect/model catalogue but obtains temporary keys from
+    // an already logged-in AWS CLI profile; static Bedrock remains an access-key-only connection.
+    if *provider == ProviderId::AMAZON_BEDROCK_SSO {
+        return resolve_bedrock_sso(model, &creds, resolved);
+    }
     if dialect == DialectKind::Bedrock {
         return resolve_bedrock(model, &creds, resolved);
     }
@@ -328,12 +371,20 @@ pub fn resolve_with(
     }
 
     // Endpoint rules that are data on the provider, not branches in a dialect (research R5).
-    let is_azure_openai = p.npm == "@ai-sdk/azure" && entry.and_then(|m| m.route.as_ref()).and_then(|r| r.api.as_ref()).is_none();
+    let is_azure_openai = p.npm == "@ai-sdk/azure"
+        && entry
+            .and_then(|m| m.route.as_ref())
+            .and_then(|r| r.api.as_ref())
+            .is_none();
     let resource = creds
         .endpoint
         .as_deref()
         .and_then(|e| reqwest::Url::parse(e).ok())
-        .and_then(|u| u.host_str().and_then(|h| h.split('.').next()).map(str::to_string));
+        .and_then(|u| {
+            u.host_str()
+                .and_then(|h| h.split('.').next())
+                .map(str::to_string)
+        });
     let extra: Vec<(&str, String)> = resource
         .iter()
         .map(|r| ("AZURE_RESOURCE_NAME", r.clone()))
@@ -358,7 +409,11 @@ pub fn resolve_with(
     };
 
     resolved.credential = if *provider == ProviderId::GITHUB_COPILOT {
-        CopilotExchange::new(ctx.http.clone(), key.unwrap_or_default(), resolved.base_url.clone())
+        CopilotExchange::new(
+            ctx.http.clone(),
+            key.unwrap_or_default(),
+            resolved.base_url.clone(),
+        )
     } else if p.npm == "@ai-sdk/azure" && dialect == DialectKind::OpenAiChat {
         StaticKey::shared(KeyStyle::Header("api-key"), key)
     } else {
@@ -382,10 +437,12 @@ fn resolve_builtin(
     model: &str,
     overrides: &ModelOverrides,
 ) -> crate::Result<ResolvedModel> {
-    let dialect = b.dialect.ok_or_else(|| VizierError(format!(
-        "\"{}\" is a media provider and can't be used for chat; pick another provider",
-        b.id
-    )))?;
+    let dialect = b.dialect.ok_or_else(|| {
+        VizierError(format!(
+            "\"{}\" is a media provider and can't be used for chat; pick another provider",
+            b.id
+        ))
+    })?;
     let creds = ctx.credentials.clone().unwrap_or_default();
     let mut resolved = base(&b.id, model, dialect);
     resolved.context_window = overrides.context_window;
@@ -428,12 +485,13 @@ fn resolve_builtin(
         return Ok(resolved);
     }
 
-    resolved.base_url = if b.id == ProviderId::LLAMA_CPP && !configured.trim_end_matches('/').ends_with("/v1") {
-        // llama.cpp's server serves the OpenAI API under `/v1`.
-        format!("{}/v1", configured.trim_end_matches('/'))
-    } else {
-        configured
-    };
+    resolved.base_url =
+        if b.id == ProviderId::LLAMA_CPP && !configured.trim_end_matches('/').ends_with("/v1") {
+            // llama.cpp's server serves the OpenAI API under `/v1`.
+            format!("{}/v1", configured.trim_end_matches('/'))
+        } else {
+            configured
+        };
     resolved.credential = StaticKey::shared(key_style(dialect), creds.api_key.clone());
     Ok(resolved)
 }
@@ -453,8 +511,14 @@ fn resolve_custom(
     let row = custom.models.iter().find(|m| m.id == model);
     let borrowed: Option<CatalogueModel> = ctx.catalogue.find_model_by_id(model, Some(dialect));
 
-    let mut limit = borrowed.as_ref().map(|m| m.limit.clone()).unwrap_or_default();
-    let mut caps = borrowed.as_ref().map(|m| m.caps.clone()).unwrap_or_default();
+    let mut limit = borrowed
+        .as_ref()
+        .map(|m| m.limit.clone())
+        .unwrap_or_default();
+    let mut caps = borrowed
+        .as_ref()
+        .map(|m| m.caps.clone())
+        .unwrap_or_default();
     if let Some(row) = row {
         if row.context.is_some() {
             limit.input = None;
@@ -508,7 +572,8 @@ pub async fn fill_context_from_provider(resolved: &mut ResolvedModel, http: &req
                 http.clone(),
                 crate::schema::agent::CompletionRetryConfig::default(),
             );
-            match tokio::time::timeout(std::time::Duration::from_secs(5), model.list_models()).await {
+            match tokio::time::timeout(std::time::Duration::from_secs(5), model.list_models()).await
+            {
                 Ok(Ok(models)) => models
                     .into_iter()
                     .find(|m| m.id == resolved.model)
@@ -536,7 +601,9 @@ pub fn provider_env(catalogue: &Catalogue, provider: &ProviderId) -> Vec<String>
     let mut env: Vec<String> = catalogue
         .provider(provider)
         .map(|p| p.env)
-        .or_else(|| builtin::builtin(provider).map(|b| b.env.iter().map(|e| e.to_string()).collect()))
+        .or_else(|| {
+            builtin::builtin(provider).map(|b| b.env.iter().map(|e| e.to_string()).collect())
+        })
         .unwrap_or_default();
     env.extend(
         crate::provider_keys::extra_env(provider)
@@ -636,7 +703,10 @@ mod resolve_tests {
         let c = catalogue();
         let none = ModelOverrides::default();
         let r = resolve_with(&ctx(&c, key("k")), &id("openai"), "gpt-5", &none).unwrap();
-        assert_eq!((r.context_window, r.context_source), (Some(272000), ContextSource::Catalogue));
+        assert_eq!(
+            (r.context_window, r.context_source),
+            (Some(272000), ContextSource::Catalogue)
+        );
         let r = resolve_with(&ctx(&c, key("k")), &id("anthropic"), "claude-x", &none).unwrap();
         assert_eq!(r.context_window, Some(200000));
         let r = resolve_with(
@@ -649,9 +719,15 @@ mod resolve_tests {
             },
         )
         .unwrap();
-        assert_eq!((r.context_window, r.context_source), (Some(50000), ContextSource::Override));
+        assert_eq!(
+            (r.context_window, r.context_source),
+            (Some(50000), ContextSource::Override)
+        );
         let r = resolve_with(&ctx(&c, key("k")), &id("anthropic"), "unlisted", &none).unwrap();
-        assert_eq!((r.context_window, r.context_source), (None, ContextSource::Unknown));
+        assert_eq!(
+            (r.context_window, r.context_source),
+            (None, ContextSource::Unknown)
+        );
     }
 
     #[test]
@@ -677,7 +753,13 @@ mod resolve_tests {
     #[test]
     fn a_route_override_picks_the_dialect_and_url() {
         let c = catalogue();
-        let r = resolve_with(&ctx(&c, key("k")), &id("routed"), "claude-x", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &ctx(&c, key("k")),
+            &id("routed"),
+            "claude-x",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert_eq!(r.dialect, DialectKind::Anthropic);
         assert_eq!(r.base_url, "https://r.test/anthropic/v1");
     }
@@ -690,21 +772,58 @@ mod resolve_tests {
             endpoint: Some("https://myres.openai.azure.com/".into()),
             ..Default::default()
         });
-        let r = resolve_with(&ctx(&c, creds), &id("azure"), "gpt-4o", &ModelOverrides::default()).unwrap();
-        assert_eq!(r.base_url, "https://myres.openai.azure.com/openai/deployments/gpt-4o");
+        let r = resolve_with(
+            &ctx(&c, creds),
+            &id("azure"),
+            "gpt-4o",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            r.base_url,
+            "https://myres.openai.azure.com/openai/deployments/gpt-4o"
+        );
         assert_eq!(r.query[0].0, "api-version");
-        assert_eq!(expand("https://${X}.test", &[("X", "abc".into())]).unwrap(), "https://abc.test");
+        assert_eq!(
+            expand("https://${X}.test", &[("X", "abc".into())]).unwrap(),
+            "https://abc.test"
+        );
         assert!(expand("https://${VZT_SURELY_UNSET}.test", &[]).is_err());
     }
 
     #[test]
     fn unknown_unsupported_and_keyless_providers_are_refused() {
         let c = catalogue();
-        let err = resolve_with(&ctx(&c, None), &id("galadriel"), "m", &ModelOverrides::default()).unwrap_err();
-        assert_eq!(err.0, "provider \"galadriel\" is not available; pick another provider");
-        assert!(resolve_with(&ctx(&c, None), &id("anthropic"), "claude-x", &ModelOverrides::default()).is_err());
+        let err = resolve_with(
+            &ctx(&c, None),
+            &id("galadriel"),
+            "m",
+            &ModelOverrides::default(),
+        )
+        .unwrap_err();
+        assert_eq!(
+            err.0,
+            "provider \"galadriel\" is not available; pick another provider"
+        );
+        assert!(
+            resolve_with(
+                &ctx(&c, None),
+                &id("anthropic"),
+                "claude-x",
+                &ModelOverrides::default()
+            )
+            .is_err()
+        );
         // Local catalogue providers need no key.
-        assert!(resolve_with(&ctx(&c, None), &id("lmstudio"), "x", &ModelOverrides::default()).is_ok());
+        assert!(
+            resolve_with(
+                &ctx(&c, None),
+                &id("lmstudio"),
+                "x",
+                &ModelOverrides::default()
+            )
+            .is_ok()
+        );
     }
 
     fn bedrock() -> ProviderId {
@@ -758,6 +877,55 @@ mod resolve_tests {
     }
 
     #[test]
+    fn aws_sso_profile_is_validated_without_reading_the_cli() {
+        assert_eq!(
+            aws_profile(&ProviderCredentials {
+                aws_profile: Some(" engineering-sso ".into()),
+                ..Default::default()
+            })
+            .unwrap(),
+            "engineering-sso"
+        );
+        assert!(aws_profile(&ProviderCredentials::default()).is_err());
+        assert!(
+            aws_profile(&ProviderCredentials {
+                aws_profile: Some("unsafe profile".into()),
+                ..Default::default()
+            })
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn bedrock_sso_reuses_catalogue_models_and_preserves_a_typed_model_id() {
+        let c = catalogue();
+        let creds = ProviderCredentials {
+            aws_profile: Some("engineering-sso".into()),
+            region: Some("ap-southeast-1".into()),
+            ..Default::default()
+        };
+        let resolved = resolve_with(
+            &ctx(&c, Some(creds)),
+            &ProviderId::AMAZON_BEDROCK_SSO,
+            "arn:aws:bedrock:ap-southeast-1:123456789012:inference-profile/custom",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
+        assert_eq!(resolved.provider, ProviderId::AMAZON_BEDROCK_SSO);
+        assert_eq!(
+            resolved.model,
+            "arn:aws:bedrock:ap-southeast-1:123456789012:inference-profile/custom"
+        );
+        assert_eq!(resolved.dialect, DialectKind::Bedrock);
+        assert_eq!(
+            resolved.base_url,
+            "https://bedrock-runtime.ap-southeast-1.amazonaws.com"
+        );
+        // Resolution builds only the credential source; AWS CLI is not invoked until signing.
+        assert_eq!(resolved.context_source, ContextSource::Unknown);
+    }
+
+    #[test]
     fn bedrock_resolves_the_regional_endpoint_limits_and_capabilities() {
         let c = catalogue();
         let r = resolve_with(
@@ -768,7 +936,10 @@ mod resolve_tests {
         )
         .unwrap();
         assert_eq!(r.dialect, DialectKind::Bedrock);
-        assert_eq!(r.base_url, "https://bedrock-runtime.us-east-1.amazonaws.com");
+        assert_eq!(
+            r.base_url,
+            "https://bedrock-runtime.us-east-1.amazonaws.com"
+        );
         assert_eq!(r.context_window, Some(300000));
         assert_eq!(r.context_source, ContextSource::Catalogue);
         assert_eq!(r.max_output, Some(10000));
@@ -784,7 +955,10 @@ mod resolve_tests {
         )
         .unwrap();
         assert_eq!(r.model, "us.anthropic.claude-haiku-4-5-20251001-v1:0");
-        assert_eq!(r.base_url, "https://bedrock-runtime.us-east-1.amazonaws.com");
+        assert_eq!(
+            r.base_url,
+            "https://bedrock-runtime.us-east-1.amazonaws.com"
+        );
     }
 
     #[test]
@@ -803,7 +977,10 @@ mod resolve_tests {
 
         let err = resolve(None).unwrap_err().0;
         assert!(err.contains("no AWS region"), "{err}");
-        assert!(err.contains("AWS_REGION") && err.contains("AWS_DEFAULT_REGION"), "{err}");
+        assert!(
+            err.contains("AWS_REGION") && err.contains("AWS_DEFAULT_REGION"),
+            "{err}"
+        );
 
         // No saved value: AWS_DEFAULT_REGION, then AWS_REGION wins over it.
         // SAFETY: serialized by `env_lock` and restored by `AwsEnv`.
@@ -856,7 +1033,10 @@ mod resolve_tests {
         };
         let err = resolve(bearer).unwrap_err().0;
         assert!(err.contains("Bedrock API keys are not supported"), "{err}");
-        assert!(err.contains("AWS_ACCESS_KEY_ID") && err.contains("AWS_SECRET_ACCESS_KEY"), "{err}");
+        assert!(
+            err.contains("AWS_ACCESS_KEY_ID") && err.contains("AWS_SECRET_ACCESS_KEY"),
+            "{err}"
+        );
 
         let mut half = bedrock_creds(Some("us-east-1"));
         half.secret_access_key = None;
@@ -879,41 +1059,94 @@ mod resolve_tests {
     #[test]
     fn builtins_resolve_with_their_defaults() {
         let c = catalogue();
-        let r = resolve_with(&ctx(&c, None), &ProviderId::OLLAMA, "llama3.2", &ModelOverrides::default()).unwrap();
-        assert_eq!((r.dialect, r.base_url.as_str()), (DialectKind::Ollama, "http://localhost:11434"));
-        let r = resolve_with(&ctx(&c, None), &ProviderId::LLAMA_CPP, "m", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &ctx(&c, None),
+            &ProviderId::OLLAMA,
+            "llama3.2",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
+        assert_eq!(
+            (r.dialect, r.base_url.as_str()),
+            (DialectKind::Ollama, "http://localhost:11434")
+        );
+        let r = resolve_with(
+            &ctx(&c, None),
+            &ProviderId::LLAMA_CPP,
+            "m",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert_eq!(r.base_url, "http://localhost:8080/v1");
-        let r = resolve_with(&ctx(&c, None), &ProviderId::DUMMYPLUG, "any-model", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &ctx(&c, None),
+            &ProviderId::DUMMYPLUG,
+            "any-model",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert_eq!(r.dialect, DialectKind::OpenAiChat);
         assert_eq!(r.base_url, "http://127.0.0.1:9998/v1");
         let creds = Some(ProviderCredentials {
             base_url: Some("http://configured.test/v1".into()),
             ..Default::default()
         });
-        let r = resolve_with(&ctx(&c, creds), &ProviderId::DUMMYPLUG, "alias", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &ctx(&c, creds),
+            &ProviderId::DUMMYPLUG,
+            "alias",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert_eq!(r.base_url, "http://configured.test/v1");
         let creds = Some(ProviderCredentials {
             access_token: Some("t".into()),
             ..Default::default()
         });
-        let r = resolve_with(&ctx(&c, creds), &ProviderId::CHATGPT, "gpt-5.4", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &ctx(&c, creds),
+            &ProviderId::CHATGPT,
+            "gpt-5.4",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert!(r.stream_required);
         assert_eq!(r.base_url, CHATGPT_BASE_URL);
-        assert!(resolve_with(&ctx(&c, None), &ProviderId::ELEVENLABS, "x", &ModelOverrides::default()).is_err());
+        assert!(
+            resolve_with(
+                &ctx(&c, None),
+                &ProviderId::ELEVENLABS,
+                "x",
+                &ModelOverrides::default()
+            )
+            .is_err()
+        );
     }
 
     #[test]
     fn dummyplug_url_environment_override_uses_the_normal_base_url_field() {
         // SAFETY: this unique test variable is removed immediately after resolution.
-        unsafe { std::env::set_var("DUMMYPLUG_URL", "http://env.test/v1"); }
+        unsafe {
+            std::env::set_var("DUMMYPLUG_URL", "http://env.test/v1");
+        }
         let env = crate::provider_keys::credentials_from_env(
             &ProviderId::DUMMYPLUG,
             &["DUMMYPLUG_URL".into()],
-        ).unwrap().0;
+        )
+        .unwrap()
+        .0;
         let c = catalogue();
-        let r = resolve_with(&ctx(&c, Some(env)), &ProviderId::DUMMYPLUG, "dummyplug", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &ctx(&c, Some(env)),
+            &ProviderId::DUMMYPLUG,
+            "dummyplug",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert_eq!(r.base_url, "http://env.test/v1");
-        unsafe { std::env::remove_var("DUMMYPLUG_URL"); }
+        unsafe {
+            std::env::remove_var("DUMMYPLUG_URL");
+        }
     }
 
     #[test]
@@ -938,7 +1171,13 @@ mod resolve_tests {
             custom: Some(&custom),
             ..ctx(&c, None)
         };
-        let r = resolve_with(&context, &id("home"), "claude-x", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &context,
+            &id("home"),
+            "claude-x",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert_eq!(r.dialect, DialectKind::Anthropic);
         assert_eq!(r.context_window, Some(200000), "from the catalogue");
         assert_eq!(r.max_output, Some(8192), "from the row");
@@ -946,7 +1185,13 @@ mod resolve_tests {
         assert_eq!(r.caps.tool_call, Some(true), "filled in");
         assert_eq!(r.headers, vec![("x-extra".into(), "1".into())]);
 
-        let r = resolve_with(&context, &id("home"), "own-model", &ModelOverrides::default()).unwrap();
+        let r = resolve_with(
+            &context,
+            &id("home"),
+            "own-model",
+            &ModelOverrides::default(),
+        )
+        .unwrap();
         assert_eq!(r.context_window, None);
     }
 }

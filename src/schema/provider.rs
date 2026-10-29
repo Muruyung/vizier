@@ -156,6 +156,9 @@ pub struct ProviderCredentials {
     /// AWS region.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
+    /// AWS CLI profile with an active IAM Identity Center (`aws sso login`) session.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub aws_profile: Option<String>,
 }
 
 impl ProviderCredentials {
@@ -170,6 +173,7 @@ impl ProviderCredentials {
             &self.secret_access_key,
             &self.session_token,
             &self.region,
+            &self.aws_profile,
         ]
         .iter()
         .all(|v| v.as_deref().is_none_or(str::is_empty))
@@ -190,6 +194,7 @@ impl ProviderCredentials {
             secret_access_key: pick(&self.secret_access_key, &other.secret_access_key),
             session_token: pick(&self.session_token, &other.session_token),
             region: pick(&self.region, &other.region),
+            aws_profile: pick(&self.aws_profile, &other.aws_profile),
         }
     }
 }
@@ -242,6 +247,22 @@ pub struct CustomProvider {
 #[cfg(test)]
 mod credential_tests {
     use super::*;
+
+    #[test]
+    fn aws_profile_takes_part_in_is_empty_and_merge() {
+        let empty = ProviderCredentials::default();
+        assert!(empty.is_empty());
+        let stored = ProviderCredentials {
+            aws_profile: Some("old-profile".into()),
+            ..Default::default()
+        };
+        assert!(!stored.is_empty());
+        let merged = stored.merged_with(&ProviderCredentials {
+            aws_profile: Some("new-profile".into()),
+            ..Default::default()
+        });
+        assert_eq!(merged.aws_profile.as_deref(), Some("new-profile"));
+    }
 
     #[test]
     fn bedrock_fields_take_part_in_is_empty_and_merge() {

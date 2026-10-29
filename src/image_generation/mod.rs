@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::Result;
 use crate::dependencies::VizierDependencies;
 use crate::llm::media::{
     self,
@@ -9,7 +10,6 @@ use crate::llm::media::{
     openai_shaped::{ImageApi, ImageSizing, OpenAiImages},
 };
 use crate::schema::agent::{ImageGenProvider, ImageGenToolSettings};
-use crate::Result;
 
 #[async_trait::async_trait]
 pub trait VizierImageGenModel: Send + Sync {
@@ -45,7 +45,9 @@ impl VizierImageGen {
             }),
             ImageGenProvider::Huggingface => Arc::new(HuggingFaceImages(endpoint)),
             ImageGenProvider::Hyperbolic => Arc::new(HyperbolicImages(endpoint)),
-            ImageGenProvider::Bedrock => Arc::new(BedrockImages::new(endpoint)?),
+            ImageGenProvider::Bedrock | ImageGenProvider::BedrockSso => {
+                Arc::new(BedrockImages::new(endpoint)?)
+            }
         };
 
         Ok(Self(model))

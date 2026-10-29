@@ -228,6 +228,7 @@ pub enum EmbeddingProvider {
     Cohere,
     Copilot,
     Bedrock,
+    BedrockSso,
 }
 
 impl EmbeddingProvider {
@@ -245,6 +246,7 @@ impl EmbeddingProvider {
             Self::Cohere => ProviderId::COHERE,
             Self::Copilot => ProviderId::GITHUB_COPILOT,
             Self::Bedrock => ProviderId::AMAZON_BEDROCK,
+            Self::BedrockSso => ProviderId::AMAZON_BEDROCK_SSO,
         })
     }
 
@@ -261,6 +263,7 @@ impl EmbeddingProvider {
             Self::Cohere => "cohere",
             Self::Copilot => "copilot",
             Self::Bedrock => "bedrock",
+            Self::BedrockSso => "bedrock_sso",
         }
     }
 }
@@ -419,6 +422,7 @@ pub enum ImageGenProvider {
     Huggingface,
     Hyperbolic,
     Bedrock,
+    BedrockSso,
 }
 
 impl ImageGenProvider {
@@ -431,6 +435,7 @@ impl ImageGenProvider {
             Self::Huggingface => ProviderId::HUGGINGFACE,
             Self::Hyperbolic => ProviderId::HYPERBOLIC,
             Self::Bedrock => ProviderId::AMAZON_BEDROCK,
+            Self::BedrockSso => ProviderId::AMAZON_BEDROCK_SSO,
         })
     }
 
@@ -441,7 +446,7 @@ impl ImageGenProvider {
             Self::Xai => "grok-2-image-1212",
             Self::Huggingface => "stabilityai/stable-diffusion-xl-base-1.0",
             Self::Hyperbolic => "SDXL1.0-base",
-            Self::Bedrock => crate::llm::media::bedrock::DEFAULT_IMAGE_MODEL,
+            Self::Bedrock | Self::BedrockSso => crate::llm::media::bedrock::DEFAULT_IMAGE_MODEL,
         }
     }
 }
@@ -478,7 +483,13 @@ mod removed_python_config_tests {
         }))
         .unwrap();
         let saved = serde_json::to_string(&config).unwrap();
-        for key in ["discord_token", "telegram_token", "brave_search", "mcp_servers", "\"discord\""] {
+        for key in [
+            "discord_token",
+            "telegram_token",
+            "brave_search",
+            "mcp_servers",
+            "\"discord\"",
+        ] {
             assert!(!saved.contains(key), "{key} survived: {saved}");
         }
     }
@@ -500,13 +511,31 @@ mod media_provider_tests {
     /// override falls back to. The catalogue (`catalogue/media.rs`) delegates to these values.
     #[test]
     fn openrouter_is_selectable_for_every_media_capability() {
-        assert_eq!(SttProvider::Openrouter.credentials(), Some(ProviderId::OPENROUTER));
-        assert_eq!(ImageGenProvider::Openrouter.credentials(), Some(ProviderId::OPENROUTER));
-        assert_eq!(TtsProvider::Openrouter.credentials(), Some(ProviderId::OPENROUTER));
+        assert_eq!(
+            SttProvider::Openrouter.credentials(),
+            Some(ProviderId::OPENROUTER)
+        );
+        assert_eq!(
+            ImageGenProvider::Openrouter.credentials(),
+            Some(ProviderId::OPENROUTER)
+        );
+        assert_eq!(
+            TtsProvider::Openrouter.credentials(),
+            Some(ProviderId::OPENROUTER)
+        );
 
-        assert_eq!(SttProvider::Openrouter.default_model(), "openai/whisper-large-v3");
-        assert_eq!(ImageGenProvider::Openrouter.default_model(), "bytedance-seed/seedream-4.5");
-        assert_eq!(TtsProvider::Openrouter.default_model(), "hexgrad/kokoro-82m");
+        assert_eq!(
+            SttProvider::Openrouter.default_model(),
+            "openai/whisper-large-v3"
+        );
+        assert_eq!(
+            ImageGenProvider::Openrouter.default_model(),
+            "bytedance-seed/seedream-4.5"
+        );
+        assert_eq!(
+            TtsProvider::Openrouter.default_model(),
+            "hexgrad/kokoro-82m"
+        );
     }
 
     #[test]
@@ -548,14 +577,19 @@ mod media_provider_tests {
     #[test]
     fn media_settings_round_trip_with_openrouter() {
         let stt: SttToolSettings =
-            serde_json::from_str(r#"{"provider": "openrouter", "model": null, "language": "en"}"#).unwrap();
+            serde_json::from_str(r#"{"provider": "openrouter", "model": null, "language": "en"}"#)
+                .unwrap();
         assert_eq!(stt.provider, SttProvider::Openrouter);
         let image: ImageGenToolSettings =
-            serde_json::from_str(r#"{"provider": "openrouter", "model": "x", "size": "2K"}"#).unwrap();
+            serde_json::from_str(r#"{"provider": "openrouter", "model": "x", "size": "2K"}"#)
+                .unwrap();
         assert_eq!(image.provider, ImageGenProvider::Openrouter);
         let json = serde_json::to_string(&image).unwrap();
         assert!(json.contains(r#""provider":"openrouter""#), "{json}");
-        assert_eq!(serde_json::from_str::<SttProvider>(r#""openai""#).unwrap(), SttProvider::Openai);
+        assert_eq!(
+            serde_json::from_str::<SttProvider>(r#""openai""#).unwrap(),
+            SttProvider::Openai
+        );
     }
 
     #[test]
